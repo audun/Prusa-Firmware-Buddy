@@ -70,6 +70,7 @@ if(HAS_NOZZLE_THERMAL_COMPENSATION)
 endif()
 
 add_subdirectory(print_status_message)
+add_subdirectory(startup_timeline)
 
 if(HAS_AUTO_RETRACT)
   add_subdirectory(auto_retract)

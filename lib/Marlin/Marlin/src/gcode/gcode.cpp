@@ -75,6 +75,7 @@ GcodeSuite gcode;
 #include <marlin_vars.hpp>
 #include <utils/serial_logging_disabler.hpp>
 #include <feature/safety_timer/safety_timer.hpp>
+#include <feature/startup_timeline/startup_timeline.hpp>
 
 // Relative motion mode for each logical axis
 static constexpr xyze_bool_t ar_init = AXIS_RELATIVE_MODES;
@@ -754,6 +755,9 @@ void GcodeSuite::process_next_command() {
   buddy::safety_timer().reset_norestore();
 
   char * const current_command = queue.command_buffer[queue.index_r];
+
+  // Stamp the dequeue time, before the command starts executing
+  buddy::startup_timeline::on_command_dequeued(current_command);
 
   PORT_REDIRECT(queue.port[queue.index_r]);
 

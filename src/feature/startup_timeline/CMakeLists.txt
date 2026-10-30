@@ -1,0 +1,1 @@
+target_sources(firmware PRIVATE startup_timeline.cpp startup_timeline_core.cpp)

@@ -239,6 +239,7 @@
 #endif
 
 #include <feature/print_status_message/print_status_message_mgr.hpp>
+#include <feature/startup_timeline/startup_timeline.hpp>
 
 #if HAS_NOZZLE_CLEANER()
     #include <nozzle_cleaner.hpp>
@@ -1126,6 +1127,8 @@ static bool pre_finalize_print([[maybe_unused]] bool finished) {
 
 /// To be called when completely exiting/resetting the server state - when user exits print preview or printing screen
 static void cleanup_print(ResetToolMapping reset_tool_mapping = ResetToolMapping::yes) {
+    buddy::startup_timeline::on_print_end();
+
     gcode.compatibility = {};
 
     if (bool(reset_tool_mapping)) {
@@ -1154,6 +1157,8 @@ static void cleanup_print(ResetToolMapping reset_tool_mapping = ResetToolMapping
 /// To be called when the printer goes from printing -> not printing end state (finished, aborted, ...)
 /// Executes all the print finishing touches
 void static finalize_print(bool finished) {
+    buddy::startup_timeline::on_print_end();
+
 #if HAS_POWER_PANIC()
     power_panic::reset();
 #endif
@@ -1621,6 +1626,10 @@ void print_start(const char *filename, const GCodeReaderPosition &resume_pos, Pr
         media_prefetch_lazy_start();
     } else {
         media_prefetch_start();
+    }
+
+    if (can_print) {
+        buddy::startup_timeline::on_print_start();
     }
 
     server.print_state = can_print ? State::PrintPreviewInit : State::Idle;
