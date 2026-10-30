@@ -337,8 +337,8 @@ static void reenable_wavetable(AxisEnum axis)
  * - `N` - No-change mode (do not change any motion setting such as feedrate)
  * - `O` - Home only if the position is not known and trusted
  * - `Q` - Same as `O`, but only for printers that are precise homing level-aware; otherwise home unconditionally (backwards compatibility reasons)
- *   - With no axis and no `O`/`Q`: while the printer is prepared by M1706 and the "Trust Prep for G28"
- *     setting is on, G28 behaves as G28 Q
+ *   - With no axis and no `O`/`Q`: while the printer is prepared by M1706 and the "Trust Prep in Start
+ *     G-code" setting is on, G28 behaves as G28 Q
  * - `P` - Do not check print sheet presence
  * - `R` - <linear> Raise by n mm/inches before homing
  * - `S` - Simulated homing only in `MARLIN_DEV_MODE`
@@ -376,7 +376,7 @@ void GcodeSuite::G28() {
     // A bare G28 in a start G-code re-homes unconditionally. While the printer is prepared (M1706),
     // the position is already trusted, so with the user's consent treat it as G28 Q.
     if (!X && !Y && !Z && !flags.only_if_needed
-      && config_store().pre_print_prep_trusts_g28.get()
+      && config_store().pre_print_prep_trusts_start_gcode.get()
       && buddy::pre_print_prep::is_prepared()) {
       flags.only_if_needed = true;
       log_info(Marlin, "G28: printer prepared, homing only if needed");

@@ -33,7 +33,8 @@ public:
     /// Enter the prepared state.
     /// @param min_nozzle_target the nozzle target in effect at completion; a
     ///        lower target later (idle cooldown, safety timer) ends the state
-    void set(uint32_t now_ms, int16_t min_nozzle_target);
+    /// @param cleanup_done the preparation ran the nozzle-cleanup taps
+    void set(uint32_t now_ms, int16_t min_nozzle_target, bool cleanup_done);
 
     /// Leave the prepared state. No-op when not prepared.
     void clear(ClearReason reason);
@@ -51,6 +52,11 @@ public:
         return prepared_;
     }
 
+    /// Prepared, and the preparation ran the nozzle-cleanup taps
+    bool is_cleanup_done() const {
+        return prepared_ && cleanup_done_;
+    }
+
     int16_t min_nozzle_target() const {
         return min_nozzle_target_;
     }
@@ -65,6 +71,7 @@ public:
 
 private:
     bool prepared_ = false;
+    bool cleanup_done_ = false;
     int16_t min_nozzle_target_ = 0;
     uint32_t since_ms_ = 0;
     std::optional<ClearReason> pending_reason_;

@@ -224,6 +224,11 @@
  *                    you should have the Mesh adjusted for a Mean Height of 0.00 and the Z-Probe measuring
  *                    0.000 at the Z Home location.
  *
+ *   - `9` - Nozzle cleanup: tap the loadcell probe repeatedly inside the rectangle given by `X`, `Y`,
+ *           `W` and `H` to wipe the nozzle tip (a printer with an available nozzle wiper uses the wiper
+ *           instead). Skipped while the printer is prepared by M1706 (which
+ *           ran the cleanup) with the "Trust Prep in Start G-code" setting on.
+ *
  *   - `11` - Verify the mesh in RAM instead of re-probing it. Requires a complete P1 result, not edited
  *            since (P5 C, P6, M420 C, M421, I, Q), taken with the same probe Z offset, a bed target
  *            within 10 °C and a probe area that covers the current one; otherwise, or when any check tap differs from the mesh by more than `O`, the mesh is

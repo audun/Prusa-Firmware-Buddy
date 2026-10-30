@@ -76,6 +76,11 @@
   #include "metric.h"
   #include <feature/startup_timeline/startup_timeline.hpp>
 
+  #include <option/has_pre_print_prep.h>
+  #if HAS_PRE_PRINT_PREP()
+    #include <feature/pre_print_prep/pre_print_prep.hpp>
+  #endif
+
   #include <math.h>
   #include <algorithm>
   #include <array>
@@ -603,6 +608,13 @@
 
         #if ENABLED(NOZZLE_LOAD_CELL) && ENABLED(PROBE_CLEANUP_SUPPORT)
           case 9: {
+            #if HAS_PRE_PRINT_PREP()
+              // The preparation (M1706) already ran these taps and nothing has moved since
+              if (config_store().pre_print_prep_trusts_start_gcode.get() && buddy::pre_print_prep::is_cleanup_done()) {
+                log_info(Marlin, "G29 P9: printer prepared, nozzle cleanup skipped");
+                return;
+              }
+            #endif
             #if HAS_CRASH_DETECTION()
               // we're going to move to an absolute position: inhibit XYZ repositioning
               crash_s.set_gcode_replay_flags(Crash_s::RECOVER_AXIS_STATE);

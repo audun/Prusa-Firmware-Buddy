@@ -33,6 +33,10 @@ void run(const RunArgs &args);
 /// first, so a caller never sees a stale "prepared".
 bool is_prepared();
 
+/// Like is_prepared(), and additionally the preparation ran the nozzle-cleanup
+/// taps, so the start G-code's G29 P9 has nothing left to do.
+bool is_cleanup_done();
+
 /// Ends the prepared state (no-op when not prepared). Also clears the mesh
 /// freshness so that a stale mesh cannot be reused without verification.
 void clear(ClearReason reason);

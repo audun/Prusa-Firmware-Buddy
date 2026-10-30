@@ -285,8 +285,9 @@ struct CurrentStore
 #if HAS_PRE_PRINT_PREP()
     /// Offer the pre-print preparation (M1706) after the home-screen Preheat
     StoreItem<bool, true, ItemFlag::features, journal::hash("Prepare For Print After Preheat")> pre_print_prep_after_preheat;
-    /// A bare G28 behaves as G28 Q while the printer is prepared (M1706)
-    StoreItem<bool, false, ItemFlag::features, journal::hash("Prepare For Print Trusts G28")> pre_print_prep_trusts_g28;
+    /// While the printer is prepared (M1706), the start G-code's bare G28 behaves as G28 Q and
+    /// G29 P9 is skipped when the preparation already cleaned the nozzle
+    StoreItem<bool, false, ItemFlag::features, journal::hash("Prepare For Print Trusts Start Gcode")> pre_print_prep_trusts_start_gcode;
 #endif
 
     StoreItem<uint32_t, 0, ItemFlag::stats, journal::hash("Odometer Time")> odometer_time;

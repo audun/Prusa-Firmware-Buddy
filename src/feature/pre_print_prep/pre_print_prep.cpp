@@ -116,7 +116,7 @@ namespace {
             switch (execute()) {
 
             case Outcome::success:
-                prepared_state().set(ticks_ms(), active_nozzle_target());
+                prepared_state().set(ticks_ms(), active_nozzle_target(), args_.cleanup);
                 log_info(PrePrintPrep, "prepared (nozzle target %d)", active_nozzle_target());
                 note("done");
                 return;
@@ -291,6 +291,10 @@ bool is_prepared() {
     const bool result = sample_and_update();
     report_clear_if_any();
     return result;
+}
+
+bool is_cleanup_done() {
+    return is_prepared() && prepared_state().is_cleanup_done();
 }
 
 void clear(ClearReason reason) {

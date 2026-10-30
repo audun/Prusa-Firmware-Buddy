@@ -21,8 +21,9 @@
  * stays "prepared": the steppers are kept enabled and the position and mesh
  * stay trusted until the position is lost, the nozzle target is lowered,
  * 30 minutes pass or a print ends. Live-Z is reset, as at the start of every
- * print. While prepared and with the "Trust Prep for G28" setting on, a bare
- * G28 behaves as G28 Q.
+ * print. While prepared and with the "Trust Prep in Start G-code" setting on,
+ * a bare G28 behaves as G28 Q and G29 P9 (nozzle cleanup) is skipped when the
+ * preparation ran the cleanup (not with C0).
  *
  *#### Usage
  *

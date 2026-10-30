@@ -145,12 +145,12 @@ protected:
     virtual void OnChange(size_t old_index) override;
 };
 
-/// Treat a bare G28 as G28 Q while the printer is prepared (M1706)
-class MI_PRE_PRINT_PREP_TRUSTS_G28 : public WI_ICON_SWITCH_OFF_ON_t {
-    static constexpr const char *const label = N_("Trust Prep for G28");
+/// While the printer is prepared (M1706), treat a bare G28 as G28 Q and skip the G29 P9 nozzle cleanup
+class MI_PRE_PRINT_PREP_TRUSTS_START_GCODE : public WI_ICON_SWITCH_OFF_ON_t {
+    static constexpr const char *const label = N_("Trust Prep in Start G-code");
 
 public:
-    MI_PRE_PRINT_PREP_TRUSTS_G28();
+    MI_PRE_PRINT_PREP_TRUSTS_START_GCODE();
 
 protected:
     virtual void OnChange(size_t old_index) override;

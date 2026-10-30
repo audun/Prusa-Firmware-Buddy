@@ -96,7 +96,7 @@ using ScreenMenuHardwareBase = BasicScreenMenu<
 #endif
 #if HAS_PRE_PRINT_PREP()
     MI_PRE_PRINT_PREP_AFTER_PREHEAT,
-    MI_PRE_PRINT_PREP_TRUSTS_G28,
+    MI_PRE_PRINT_PREP_TRUSTS_START_GCODE,
 #endif
     MI_INPUT_SHAPER,
 #if HAS_PHASE_STEPPING()

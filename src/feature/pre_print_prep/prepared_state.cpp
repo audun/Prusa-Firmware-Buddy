@@ -4,8 +4,9 @@
 
 namespace buddy::pre_print_prep {
 
-void PreparedState::set(uint32_t now_ms, int16_t min_nozzle_target) {
+void PreparedState::set(uint32_t now_ms, int16_t min_nozzle_target, bool cleanup_done) {
     prepared_ = true;
+    cleanup_done_ = cleanup_done;
     since_ms_ = now_ms;
     min_nozzle_target_ = min_nozzle_target;
     pending_reason_.reset();
@@ -16,6 +17,7 @@ void PreparedState::clear(ClearReason reason) {
         return;
     }
     prepared_ = false;
+    cleanup_done_ = false;
     pending_reason_ = reason;
 }
 

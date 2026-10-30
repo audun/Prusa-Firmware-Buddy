@@ -209,11 +209,11 @@ void MI_PRE_PRINT_PREP_AFTER_PREHEAT::OnChange([[maybe_unused]] size_t old_index
     config_store().pre_print_prep_after_preheat.set(value());
 }
 
-MI_PRE_PRINT_PREP_TRUSTS_G28::MI_PRE_PRINT_PREP_TRUSTS_G28()
-    : WI_ICON_SWITCH_OFF_ON_t(config_store().pre_print_prep_trusts_g28.get(), _(label), nullptr, is_enabled_t::yes, is_hidden_t::no) {}
+MI_PRE_PRINT_PREP_TRUSTS_START_GCODE::MI_PRE_PRINT_PREP_TRUSTS_START_GCODE()
+    : WI_ICON_SWITCH_OFF_ON_t(config_store().pre_print_prep_trusts_start_gcode.get(), _(label), nullptr, is_enabled_t::yes, is_hidden_t::no) {}
 
-void MI_PRE_PRINT_PREP_TRUSTS_G28::OnChange([[maybe_unused]] size_t old_index) {
-    config_store().pre_print_prep_trusts_g28.set(value());
+void MI_PRE_PRINT_PREP_TRUSTS_START_GCODE::OnChange([[maybe_unused]] size_t old_index) {
+    config_store().pre_print_prep_trusts_start_gcode.set(value());
 }
 #endif
 #if HAS_EXPANSION_JOINTS_GEN_2()
