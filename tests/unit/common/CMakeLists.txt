@@ -38,6 +38,23 @@ target_include_directories(
   )
 add_catch_test(string_builder_tests)
 
+# filament_presets_tests: compile the preset table once per HAS_LOADCELL/HAS_INDX combination
+foreach(variant IN ITEMS loadcell0 loadcell1 loadcell1_indx)
+  set(target filament_presets_${variant}_tests)
+  add_executable(
+    ${target} ${CMAKE_CURRENT_SOURCE_DIR}/filament_presets_tests.cpp
+              ${CMAKE_SOURCE_DIR}/src/common/filament_presets.cpp
+    )
+  target_include_directories(
+    ${target}
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/filament_presets_stub/${variant}
+            ${CMAKE_CURRENT_SOURCE_DIR}/filament_presets_stub/common ${CMAKE_SOURCE_DIR}/include
+            ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/common
+    )
+  target_link_libraries(${target} buddy_utils freertos_tests logging-mock)
+  add_catch_test(${target})
+endforeach()
+
 add_executable(timing_tests timing_tests.cpp)
 target_compile_definitions(timing_tests PRIVATE MCU=STM32F407VG)
 target_include_directories(

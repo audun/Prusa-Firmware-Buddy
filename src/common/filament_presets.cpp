@@ -10,13 +10,17 @@
     #include <inc/MarlinConfig.h>
 #endif
 
-// These temperatures correspond to slicer defaults for MBL.
+// These temperatures correspond to slicer defaults for MBL. On loadcell printers
+// the PLA/PETG preheat matches the HT_MBL10 probing temperature (print - 10).
 constexpr const EnumArray<PresetFilamentType, FilamentTypeParameters, PresetFilamentType::_count> preset_filament_parameters_constexpr {
     {
         PresetFilamentType::PLA,
         FilamentTypeParameters {
             .name = "PLA",
             .nozzle_temperature = 215,
+            // Probing temperature of the slicer profiles with the HT_MBL10 note
+            // (first layer temperature - 10); INDX keeps 170, its tool-offset Z-probing temperature
+            .nozzle_preheat_temperature = (HAS_LOADCELL() && !HAS_INDX()) ? 215 - 10 : 170,
             .heatbed_temperature = 60,
 #if HAS_FILAMENT_BASE_PRESET_PARAM()
             .base_preset = PresetFilamentType::PLA,
@@ -36,6 +40,7 @@ constexpr const EnumArray<PresetFilamentType, FilamentTypeParameters, PresetFila
             FilamentTypeParameters {
                 .name = "PETG",
                 .nozzle_temperature = 230,
+                .nozzle_preheat_temperature = (HAS_LOADCELL() && !HAS_INDX()) ? 230 - 10 : 170,
                 .heatbed_temperature = 85,
 #if HAS_FILAMENT_BASE_PRESET_PARAM()
                 .base_preset = PresetFilamentType::PETG,
