@@ -45,6 +45,7 @@
 #include <option/has_mmu2.h>
 #include <option/has_human_interactions.h>
 #include <option/has_selftest.h>
+#include <option/has_pre_print_prep.h>
 
 #include "screen_menu_settings.hpp"
 #include "screen_menu_filament.hpp"
@@ -195,6 +196,15 @@ static void FilamentBtnMMU_cb(window_t &) {
 }
 #endif
 
+namespace {
+#if HAS_PRE_PRINT_PREP()
+// P: offer the pre-print preparation once a filament was chosen
+constexpr const char *preheat_gcode = "M1700 T-1 P1";
+#else
+constexpr const char *preheat_gcode = "M1700 T-1";
+#endif
+} // namespace
+
 // clang-format off
 screen_home_data_t::screen_home_data_t()
     : screen_t()
@@ -206,7 +216,7 @@ screen_home_data_t::screen_home_data_t()
 #endif
     , w_buttons {
         { this, Rect16(), nullptr, [](window_t&) { Screens::Access()->Open(ScreenFactory::Screen<screen_filebrowser_data_t>); } },
-        { this, Rect16(), nullptr, [](window_t&) { marlin_client::gcode_printf("M1700 T-1"); } },
+        { this, Rect16(), nullptr, [](window_t&) { marlin_client::gcode(preheat_gcode); } },
         { this, Rect16(), nullptr, FilamentBtn_cb },
         { this, Rect16(), nullptr, [](window_t&) { Screens::Access()->Open(ScreenFactory::Screen<ScreenMenuControl>); } },
         { this, Rect16(), nullptr, [](window_t&) { Screens::Access()->Open(ScreenFactory::Screen<ScreenMenuSettings>); } },

@@ -237,6 +237,11 @@
     #include <feature/filament_tracker/filament_tracker.hpp>
 #endif
 
+#include <option/has_pre_print_prep.h>
+#if HAS_PRE_PRINT_PREP()
+    #include <feature/pre_print_prep/pre_print_prep.hpp>
+#endif
+
 #include <option/buddy_enable_wui.h>
 #if BUDDY_ENABLE_WUI()
     #include <wui.h>
@@ -978,6 +983,10 @@ static void cycle() {
     // We still need to run the step() there to prevent "sampling bias" so that the timer could reset itself during movements and single-injected gcodes
     buddy::stepper_timeout().step();
 
+#if HAS_PRE_PRINT_PREP()
+    buddy::pre_print_prep::step();
+#endif
+
 #if HAS_BED_FAN()
     bed_fan::controller().step();
 #endif
@@ -1216,6 +1225,10 @@ void static finalize_print(bool finished) {
 #endif
     // The mesh stays valid, but the next G29 P11 shall tap it again
     ubl.clear_mesh_fresh();
+#if HAS_PRE_PRINT_PREP()
+    // The part is about to be removed; the bed is no longer known to be clear
+    buddy::pre_print_prep::clear(buddy::pre_print_prep::ClearReason::print_finished);
+#endif
 
 #if HAS_CHAMBER_API()
     buddy::chamber().reset();

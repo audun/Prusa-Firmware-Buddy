@@ -5,6 +5,11 @@
 #include <marlin_server.hpp>
 #include <module/stepper/indirection.h>
 
+#include <option/has_pre_print_prep.h>
+#if HAS_PRE_PRINT_PREP()
+    #include <feature/pre_print_prep/pre_print_prep.hpp>
+#endif
+
 namespace buddy {
 
 StepperTimeoutManager &stepper_timeout() {
@@ -25,7 +30,13 @@ void StepperTimeoutManager::step() {
 
     // Any activity - running gcode, motors, ...
     // Never disable motors during print (or print pause, when we're not processing anything)
-    if (marlin_server::is_processing() || marlin_server::is_printing()) {
+    // nor while the printer is prepared for a print: disabling XY would drop the position trust
+    // the preparation established. The heater safety timer bounds this through the nozzle target.
+    if (marlin_server::is_processing() || marlin_server::is_printing()
+#if HAS_PRE_PRINT_PREP()
+        || buddy::pre_print_prep::is_prepared()
+#endif
+    ) {
         timer_.restart(now);
     }
 

@@ -374,7 +374,8 @@ void GcodeSuite::G29() {
             case Result::abort:
                 return;
             case Result::ignore:
-                // Continue without retrying
+                // Continue without retrying; the user accepted the failure
+                ubl.g29_nozzle_cleaning_failed = false;
                 break;
             case Result::retry:
                 // Retry nozzle cleaning without purge

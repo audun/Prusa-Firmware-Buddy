@@ -48,6 +48,7 @@ This file is generated automatically so don't edit it directly
 - PhaseStepping: logging::Severity::debug, lib/Marlin/Marlin/src/feature/phase_stepping/phase_stepping.cpp
 - Ping: logging::Severity::info, src/common/ping_manager.cpp
 - PowerPanic: logging::Severity::info, src/common/power_panic.cpp
+- PrePrintPrep: logging::Severity::info, src/feature/pre_print_prep/pre_print_prep.cpp
 - PreciseStepping: logging::Severity::debug, lib/Marlin/Marlin/src/feature/precise_stepping/precise_stepping.cpp
 - Probe: logging::Severity::info, lib/Marlin/Marlin/src/module/probe.cpp
 - PrusaToolChanger: logging::Severity::debug, lib/Marlin/Marlin/src/module/prusa/toolchanger_utils.cpp

@@ -53,6 +53,7 @@
 #include <option/has_switchable_auto_retract.h>
 #include <option/has_switchable_homing_calibration.h>
 #include <option/has_door_sensor_calibration.h>
+#include <option/has_pre_print_prep.h>
 #include <option/has_chamber_vents.h>
 #include <option/has_precise_homing_corexy.h>
 #include <option/has_e2ee_support.h>
@@ -281,6 +282,12 @@ struct CurrentStore
     StoreItem<bool, true, ItemFlag::features | ItemFlag::common_misconfigurations, journal::hash("FS Autoload Enabled")> fs_autoload_enabled;
     /// Run the Z motor alignment (G162 Z R0) at the end of every finished print, with the bed already parked low
     StoreItem<bool, false, ItemFlag::features, journal::hash("Z Align After Print")> z_align_after_print;
+#if HAS_PRE_PRINT_PREP()
+    /// Offer the pre-print preparation (M1706) after the home-screen Preheat
+    StoreItem<bool, true, ItemFlag::features, journal::hash("Prepare For Print After Preheat")> pre_print_prep_after_preheat;
+    /// A bare G28 behaves as G28 Q while the printer is prepared (M1706)
+    StoreItem<bool, false, ItemFlag::features, journal::hash("Prepare For Print Trusts G28")> pre_print_prep_trusts_g28;
+#endif
 
     StoreItem<uint32_t, 0, ItemFlag::stats, journal::hash("Odometer Time")> odometer_time;
     StoreItem<uint8_t, 0, ItemFlag::network, journal::hash("Active NetDev")> active_netdev; // active network device

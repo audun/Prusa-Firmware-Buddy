@@ -27,6 +27,11 @@
     #include <fsm/gearbox_alignment_phases.hpp>
 #endif
 
+#include <option/has_pre_print_prep.h>
+#if HAS_PRE_PRINT_PREP()
+    #include <fsm/pre_print_prep_phases.hpp>
+#endif
+
 #include <fsm/filament_change_phases.hpp>
 #include <fsm/preheat_phases.hpp>
 
@@ -73,6 +78,9 @@ constinit const EnumArray<ClientFSM, std::span<const PhaseResponses>, ClientFSM:
 #endif
 #if HAS_DOOR_SENSOR_CALIBRATION()
         { ClientFSM::DoorSensorCalibration, door_sensor_calibration_responses },
+#endif
+#if HAS_PRE_PRINT_PREP()
+        { ClientFSM::PrePrintPrep, pre_print_prep_responses },
 #endif
 #if HAS_LOADCELL()
         { ClientFSM::NozzleCleaningFailed, nozzle_cleaning_responses },

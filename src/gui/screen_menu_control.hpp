@@ -14,6 +14,7 @@
 #include <option/has_mmu2.h>
 #include <option/has_coldpull.h>
 #include <option/has_sheet_profiles.h>
+#include <option/has_pre_print_prep.h>
 #include <printers.h>
 #include "MItem_mmu.hpp"
 #include <device/board.h>
@@ -33,6 +34,9 @@ using ScreenMenuControlSpec = ScreenMenu<EFooter::On,
 #endif
     MI_TEMPERATURE_AND_FANS,
     MI_AUTO_HOME,
+#if HAS_PRE_PRINT_PREP()
+    MI_PRE_PRINT_PREP,
+#endif
 #if HAS_TOOLCHANGER()
     MI_PICK_PARK_TOOL,
 #endif

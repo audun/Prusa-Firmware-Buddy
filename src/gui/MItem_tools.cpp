@@ -218,6 +218,21 @@ void MI_AUTO_HOME::click(IWindowMenu & /*window_menu*/) {
     }
 }
 
+#if HAS_PRE_PRINT_PREP()
+MI_PRE_PRINT_PREP::MI_PRE_PRINT_PREP()
+    : IWindowMenuItem(_(label), nullptr, is_enabled_t::yes, is_hidden_t::no) {
+}
+
+void MI_PRE_PRINT_PREP::click(IWindowMenu & /*window_menu*/) {
+    if (marlin_vars().gqueue != 0 || marlin_client::is_printing()) {
+        MsgBoxWarning(_(printer_busy_text), Responses_Ok);
+        return;
+    }
+
+    marlin_client::gcode("M1706");
+}
+#endif
+
 #if HAS_WASTEBIN_FILL_TRACKING()
 MI_NOZZLE_CLEANER_EMPTY_WASTEBIN::MI_NOZZLE_CLEANER_EMPTY_WASTEBIN()
     : IWindowMenuItem(_(label), nullptr, is_enabled_t::yes, is_hidden_t::no) {}

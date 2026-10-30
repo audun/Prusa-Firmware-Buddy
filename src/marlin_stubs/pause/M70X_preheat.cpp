@@ -26,6 +26,10 @@
     #include <marlin_server.hpp>
 #endif
 
+#if HAS_PRE_PRINT_PREP()
+    #include <feature/pre_print_prep/pre_print_prep.hpp>
+#endif
+
 #include <option/has_anfc.h>
 #include <bsod/bsod.h>
 #if HAS_ANFC()
@@ -410,4 +414,12 @@ void filament_gcodes::M1700_preheat(const M1700Args &args) {
 
     // we might want to set filament type even with preheat, if so do:
     // Filaments::SetToBeLoaded(filament);
+
+#if HAS_PRE_PRINT_PREP()
+    // The Preheat FSM is closed by now, so the preparation opens its own dialog cleanly
+    if (args.run_pre_print_prep && args.mode == PreheatMode::preheat && filament != FilamentType::none
+        && response != Response::Cooldown && config_store().pre_print_prep_after_preheat.get()) {
+        buddy::pre_print_prep::run({ .ask_bed_clear = true });
+    }
+#endif
 }

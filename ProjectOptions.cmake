@@ -675,6 +675,10 @@ set_feature_for_printers(
   HAS_DOOR_SENSOR_CALIBRATION "COREONE" "COREONE_INDX" "COREONEL" "COREONEL_INDX"
   )
 
+# Pre-print preparation (M1706): home, sheet detection, nozzle cleanup and mesh verification while
+# idle, with a "prepared" state that keeps the steppers on
+set_feature_for_printers(HAS_PRE_PRINT_PREP "COREONE" "MK4")
+
 # Set GUI settings
 set(PRINTERS_WITH_GUI
     "COREONE"

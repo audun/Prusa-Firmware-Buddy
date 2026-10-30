@@ -17,6 +17,7 @@
 #include <option/has_leds.h>
 #include <option/has_manual_belt_tuning.h>
 #include <option/has_door_sensor_calibration.h>
+#include <option/has_pre_print_prep.h>
 #include <option/has_chamber_vents.h>
 #include <option/has_spool_join.h>
 #include <option/has_indx.h>
@@ -295,6 +296,11 @@ bool GcodeSuite::process_parsed_command_custom(bool no_ok) {
 #if HAS_AUTO_RETRACT()
         case 1705:
             PrusaGcodeSuite::M1705();
+            break;
+#endif
+#if HAS_PRE_PRINT_PREP()
+        case 1706:
+            PrusaGcodeSuite::M1706();
             break;
 #endif
 

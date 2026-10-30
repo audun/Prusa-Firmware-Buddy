@@ -32,6 +32,7 @@
 #include <option/has_indx.h>
 #include <option/has_heaters_selftest_gcode.h>
 #include <option/has_door_sensor_calibration.h>
+#include <option/has_pre_print_prep.h>
 #include <option/xbuddy_extension_variant.h>
 #include <option/has_side_fsensor.h>
 #include <option/has_bed_fan.h>
@@ -283,6 +284,9 @@ DeviceState get_state(bool ready) {
 #if HAS_DOOR_SENSOR_CALIBRATION()
     case ClientFSM::DoorSensorCalibration:
 #endif
+#if HAS_PRE_PRINT_PREP()
+    case ClientFSM::PrePrintPrep:
+#endif
 #if HAS_INDX()
     case ClientFSM::DockCalibration:
     case ClientFSM::NozzleCleanerCalibration:
@@ -532,6 +536,9 @@ StateWithDialog get_state_with_dialog(bool ready) {
 #endif
 #if HAS_DOOR_SENSOR_CALIBRATION()
     case ClientFSM::DoorSensorCalibration:
+#endif
+#if HAS_PRE_PRINT_PREP()
+    case ClientFSM::PrePrintPrep:
 #endif
 #if HAS_INDX()
     case ClientFSM::DockCalibration:

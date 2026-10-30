@@ -18,6 +18,7 @@
 #include <option/has_emergency_stop.h>
 #include <option/buddy_enable_connect.h>
 #include <option/has_door_sensor_calibration.h>
+#include <option/has_pre_print_prep.h>
 #include <option/has_chamber_vents.h>
 #include <option/has_spool_join.h>
 #include <option/has_indx.h>
@@ -167,6 +168,9 @@ void M1703(); //< Wi-fi setup. Prusa platform specific
 
 #if HAS_AUTO_RETRACT()
 void M1705(); //< Autoretract
+#endif
+#if HAS_PRE_PRINT_PREP()
+void M1706(); //< Pre-print preparation: home, clean the nozzle, verify the mesh, stay prepared
 #endif
 
 void M1978(); //< Fan Selftest

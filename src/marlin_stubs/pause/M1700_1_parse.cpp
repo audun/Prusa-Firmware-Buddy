@@ -22,7 +22,7 @@
  *
  *#### Usage
  *
- *    M1700 [ T | W | S | E | B0 | C0 | H0 ]
+ *    M1700 [ T | W | S | E | B0 | C0 | H0 | P ]
  *
  *#### Parameters
  *
@@ -39,6 +39,7 @@
  * - `B0` - Do not preheat the bed
  * - `C0` - Do not set chamber temperature
  * - `H0` - Do not set heatbreak temperature
+ * - `P` - Offer the pre-print preparation (M1706) after a filament was chosen, when enabled in the settings
  */
 void PrusaGcodeSuite::M1700() {
     const uint8_t preheat = std::min(parser.byteval('W', 3), uint8_t(RetAndCool_t::last_));
@@ -65,6 +66,9 @@ void PrusaGcodeSuite::M1700() {
 #endif
 #if HAS_FILAMENT_HEATBREAK_PARAM()
         .set_heatbreak = parser.boolval('H', true),
+#endif
+#if HAS_PRE_PRINT_PREP()
+        .run_pre_print_prep = parser.boolval('P'),
 #endif
     });
 }

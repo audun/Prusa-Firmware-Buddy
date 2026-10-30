@@ -25,6 +25,7 @@
 #include <option/has_indx.h>
 #include <option/has_wastebin_fill_tracking.h>
 #include <option/has_extruder_fsensor.h>
+#include <option/has_pre_print_prep.h>
 #include <meta_utils.hpp>
 #include <gui/menu_item/menu_item_gcode_action.hpp>
 
@@ -92,6 +93,19 @@ public:
 protected:
     virtual void click(IWindowMenu &window_menu) override;
 };
+
+#if HAS_PRE_PRINT_PREP()
+/// Home, detect the sheet, clean the nozzle and verify the mesh now, so that the next print starts right away (M1706)
+class MI_PRE_PRINT_PREP : public IWindowMenuItem {
+    static constexpr const char *const label = N_("Prepare for Print");
+
+public:
+    MI_PRE_PRINT_PREP();
+
+protected:
+    virtual void click(IWindowMenu &window_menu) override;
+};
+#endif
 
 #if HAS_WASTEBIN_FILL_TRACKING()
 /// Tune / Wastebin-submenu action: park the nozzle clear of the INDX wastebin so the user can empty

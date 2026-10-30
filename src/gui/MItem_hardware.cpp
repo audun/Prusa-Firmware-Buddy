@@ -201,6 +201,21 @@ void MI_AUTO_PRECISE_HOMING_CALIBRATION::OnChange(size_t) {
     config_store().auto_recalibrate_precise_homing.set(static_cast<Tristate::Value>(get_index()));
 }
 #endif
+#if HAS_PRE_PRINT_PREP()
+MI_PRE_PRINT_PREP_AFTER_PREHEAT::MI_PRE_PRINT_PREP_AFTER_PREHEAT()
+    : WI_ICON_SWITCH_OFF_ON_t(config_store().pre_print_prep_after_preheat.get(), _(label), nullptr, is_enabled_t::yes, is_hidden_t::no) {}
+
+void MI_PRE_PRINT_PREP_AFTER_PREHEAT::OnChange([[maybe_unused]] size_t old_index) {
+    config_store().pre_print_prep_after_preheat.set(value());
+}
+
+MI_PRE_PRINT_PREP_TRUSTS_G28::MI_PRE_PRINT_PREP_TRUSTS_G28()
+    : WI_ICON_SWITCH_OFF_ON_t(config_store().pre_print_prep_trusts_g28.get(), _(label), nullptr, is_enabled_t::yes, is_hidden_t::no) {}
+
+void MI_PRE_PRINT_PREP_TRUSTS_G28::OnChange([[maybe_unused]] size_t old_index) {
+    config_store().pre_print_prep_trusts_g28.set(value());
+}
+#endif
 #if HAS_EXPANSION_JOINTS_GEN_2()
 MI_EXPANSION_JOINTS_GEN_2::MI_EXPANSION_JOINTS_GEN_2()
     : WI_ICON_SWITCH_OFF_ON_t(false, _(label), nullptr, is_enabled_t::yes, is_hidden_t::no) {}

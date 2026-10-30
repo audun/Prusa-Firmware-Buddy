@@ -6,6 +6,7 @@
 #include <option/has_phase_stepping_calibration.h>
 #include <option/has_input_shaper_calibration.h>
 #include <option/has_door_sensor_calibration.h>
+#include <option/has_pre_print_prep.h>
 #include <option/has_manual_belt_tuning.h>
 #include <option/has_indx.h>
 #include <option/has_heaters_selftest_gcode.h>
@@ -40,6 +41,9 @@ static constexpr uint32_t score(ClientFSM fsm_type) {
 #endif
 #if HAS_DOOR_SENSOR_CALIBRATION()
     case ClientFSM::DoorSensorCalibration:
+#endif
+#if HAS_PRE_PRINT_PREP()
+    case ClientFSM::PrePrintPrep:
 #endif
 #if HAS_INDX()
     case ClientFSM::DockCalibration:

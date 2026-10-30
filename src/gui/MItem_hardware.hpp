@@ -13,6 +13,7 @@
 #include <option/has_nozzle_cleaner_lite.h>
 #include <option/has_15gt_belts.h>
 #include <option/has_switchable_homing_calibration.h>
+#include <option/has_pre_print_prep.h>
 #include <common/extended_printer_type.hpp>
 #include <common/printer_variant/printer_variant.hpp>
 #include <dynamic_index_mapping.hpp>
@@ -129,6 +130,30 @@ public:
 
 protected:
     virtual void OnChange(size_t) override;
+};
+#endif
+
+#if HAS_PRE_PRINT_PREP()
+/// Offer the pre-print preparation (M1706) after the home-screen Preheat
+class MI_PRE_PRINT_PREP_AFTER_PREHEAT : public WI_ICON_SWITCH_OFF_ON_t {
+    static constexpr const char *const label = N_("Prepare After Preheat");
+
+public:
+    MI_PRE_PRINT_PREP_AFTER_PREHEAT();
+
+protected:
+    virtual void OnChange(size_t old_index) override;
+};
+
+/// Treat a bare G28 as G28 Q while the printer is prepared (M1706)
+class MI_PRE_PRINT_PREP_TRUSTS_G28 : public WI_ICON_SWITCH_OFF_ON_t {
+    static constexpr const char *const label = N_("Trust Prep for G28");
+
+public:
+    MI_PRE_PRINT_PREP_TRUSTS_G28();
+
+protected:
+    virtual void OnChange(size_t old_index) override;
 };
 #endif
 

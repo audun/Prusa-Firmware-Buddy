@@ -12,6 +12,7 @@
 #include <algorithm>
 
 #include <option/has_chamber_api.h>
+#include <option/has_pre_print_prep.h>
 
 #include <option/has_anfc.h>
 #if HAS_ANFC()
@@ -116,6 +117,11 @@ struct M1700Args {
 #if HAS_FILAMENT_HEATBREAK_PARAM()
     /// Whether to set target heatbreak temperature
     bool set_heatbreak : 1;
+#endif
+
+#if HAS_PRE_PRINT_PREP()
+    /// Offer the pre-print preparation (M1706) once a filament was chosen
+    bool run_pre_print_prep : 1 = false;
 #endif
 };
 
