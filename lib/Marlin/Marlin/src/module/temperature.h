@@ -47,6 +47,7 @@
 #include <module/temperature/temp_defines.hpp>
 #include <module/temperature/hotend_regulator/hotend_regulator.hpp>
 #include <module/temperature/thermal_runaway.hpp>
+#include <module/temperature/temp_residency.hpp>
 #include <tool/hotend/hotend.hpp>
 
 #if HAS_PID_HEATING
@@ -127,6 +128,9 @@ class Temperature {
       // Emulates heat propagation from the bed to the frame.
       static float bed_frame_est_celsius;
       static uint32_t bed_frame_millis;
+      // Continuous residency so callers waiting on the bed return at once
+      // when it has already settled
+      static TempResidency bed_residency;
     #endif
 
     #if HAS_TEMP_BOARD
@@ -356,7 +360,11 @@ class Temperature {
 
       static void setTargetBed(const int16_t celsius);
 
-      /// @returns whether the bed has stabilized on the target temperature (or if the target temp is 0)
+      /// Advance the bed residency from the thermal tick
+      static void manage_bed_temp_residency();
+
+      /// @returns whether the bed has been within TEMP_BED_WINDOW of the target
+      /// for TEMP_BED_RESIDENCY_TIME (or the target is 0)
       static bool is_bed_temperature_reached();
 
       static bool wait_for_bed(const bool no_wait_for_cooling=true);

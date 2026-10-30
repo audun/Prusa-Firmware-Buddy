@@ -174,6 +174,11 @@ Temperature thermalManager;
   bed_info_t Temperature::temp_bed; // = { 0 }
   float Temperature::bed_frame_est_celsius = TempInfo::celsius_uninitialized;
   uint32_t Temperature::bed_frame_millis = 0;
+  TempResidency Temperature::bed_residency({
+    .window = TEMP_BED_WINDOW,
+    .hysteresis = TEMP_BED_HYSTERESIS,
+    .residency_ms = (TEMP_BED_RESIDENCY_TIME) * 1000UL,
+  });
 
   // Init min and max temp with extreme values to prevent false errors during startup
   static MarlinTemptableRawMinMax minmaxtemp_raw_BED;
@@ -423,6 +428,8 @@ void Temperature::manage_heater() {
   }
 
   #if HAS_HEATED_BED
+
+    manage_bed_temp_residency();
 
     #if ENABLED(THERMAL_PROTECTION_BED)
       if (degBed() > BED_MAXTEMP)
@@ -1223,10 +1230,12 @@ void Temperature::isr() {
       #define MIN_COOLING_SLOPE_TIME_BED 60
     #endif
 
+    void Temperature::manage_bed_temp_residency() {
+      bed_residency.update(temp_bed.target, temp_bed.celsius, millis());
+    }
+
     bool Temperature::is_bed_temperature_reached() {
-      // TODO: Switch to residency time and employ with wait_for_bed
-      // To achieve that, we will have to take the residency out of wait_for_bed and make it global
-      return temp_bed.target <= 0 || std::abs(temp_bed.target - temp_bed.celsius) <= TEMP_BED_HYSTERESIS;
+      return bed_residency.reached();
     }
 
     void Temperature::setTargetBed(const int16_t celsius) {
@@ -1238,14 +1247,20 @@ void Temperature::isr() {
             powerManager.power_on();
         }
     #endif
-        temp_bed.target =
+        const int16_t new_target =
     #ifdef BED_MAXTEMP
-            _MIN(celsius, BED_MAXTEMP - BED_MAXTEMP_SAFETY_MARGIN)
+            _MIN(celsius, BED_MAXTEMP - BED_MAXTEMP_SAFETY_MARGIN);
     #else
       // #error dead code found by automatic analyses (see BFW-5461)
-            celsius
+            celsius;
     #endif
-            ;
+
+        // Residency has to be earned again for a new target. Re-sending the
+        // same target (M140 S60 before M190 R60) keeps it.
+        if (temp_bed.target != new_target) {
+            bed_residency.reset();
+        }
+        temp_bed.target = new_target;
 
     #if HAS_MODULAR_BED()
         for (uint8_t x = 0; x < X_HBL_COUNT; ++x) {
@@ -1271,24 +1286,12 @@ void Temperature::isr() {
 
 
     bool Temperature::wait_for_bed(const bool no_wait_for_cooling/*=true*/) {
-      // TODO: Employ is_bed_temperature_reached once it considers residency
-      
       // Keep all heaters on while we're waiting for temperatures
       buddy::SafetyTimerBlocker safety_timer_blocker;
 
-      #if TEMP_BED_RESIDENCY_TIME > 0
-        millis_t residency_start_ms = 0;
-        bool first_loop = true;
-        // Loop until the temperature has stabilized
-        #define TEMP_BED_CONDITIONS (!residency_start_ms || PENDING(now, residency_start_ms + (TEMP_BED_RESIDENCY_TIME) * 1000UL))
-      #else
-        // #error dead code found by automatic analyses (see BFW-5461)
-        // Loop until the temperature is very close target
-        #define TEMP_BED_CONDITIONS (wants_to_cool ? isCoolingBed() : isHeatingBed())
-      #endif
-
       float target_temp = -1, old_temp = 9999;
       bool wants_to_cool = false;
+      bool first_iteration = true;
       wait_for_heatup = true;
       millis_t now, next_temp_ms = 0, next_cool_check_ms = 0;
 
@@ -1312,6 +1315,16 @@ void Temperature::isr() {
           if (no_wait_for_cooling && wants_to_cool) break;
         }
 
+        // Residency is tracked from the thermal tick, so a bed that has
+        // already settled on the target costs nothing here
+        if (is_bed_temperature_reached()) {
+          if (first_iteration) {
+            log_info(MarlinServer, "Bed residency already satisfied, not waiting");
+          }
+          break;
+        }
+        first_iteration = false;
+
         now = millis();
         if (ELAPSED(now, next_temp_ms)) { //Print Temp Reading every 1 second while heating up.
           // Do not log heater states, only print to serial
@@ -1319,13 +1332,11 @@ void Temperature::isr() {
 
           next_temp_ms = now + 1000UL;
           print_heater_states(active_extruder);
-          #if TEMP_BED_RESIDENCY_TIME > 0
-            SERIAL_ECHOPGM(" W:");
-            if (residency_start_ms)
-              SERIAL_ECHO(long((((TEMP_BED_RESIDENCY_TIME) * 1000UL) - (now - residency_start_ms)) / 1000UL));
-            else
-              SERIAL_CHAR('?');
-          #endif
+          SERIAL_ECHOPGM(" W:");
+          if (const auto start_ms = bed_residency.start_ms())
+            SERIAL_ECHO(long((((TEMP_BED_RESIDENCY_TIME) * 1000UL) - (now - start_ms)) / 1000UL));
+          else
+            SERIAL_CHAR('?');
           SERIAL_EOL();
         }
 
@@ -1333,24 +1344,6 @@ void Temperature::isr() {
 
         const float temp = degBed();
         statusGuard.update<PrintStatusMessage::waiting_for_bed_temp>({.current = temp, .target = target_temp});
-
-        #if TEMP_BED_RESIDENCY_TIME > 0
-
-          const float temp_diff = ABS(target_temp - temp);
-
-          if (!residency_start_ms) {
-            // Start the TEMP_BED_RESIDENCY_TIME timer when we reach target temp for the first time.
-            if (temp_diff < TEMP_BED_WINDOW) {
-              residency_start_ms = now;
-              if (first_loop) residency_start_ms += (TEMP_BED_RESIDENCY_TIME) * 1000UL;
-            }
-          }
-          else if (temp_diff > TEMP_BED_HYSTERESIS) {
-            // Restart the timer whenever the temperature falls outside the hysteresis.
-            residency_start_ms = now;
-          }
-
-        #endif // TEMP_BED_RESIDENCY_TIME > 0
 
         // Prevent a wait-forever situation if R is misused i.e. M190 R0
         if (wants_to_cool) {
@@ -1363,11 +1356,7 @@ void Temperature::isr() {
           }
         }
 
-        #if TEMP_BED_RESIDENCY_TIME > 0
-          first_loop = false;
-        #endif
-
-      } while (wait_for_heatup && TEMP_BED_CONDITIONS);
+      } while (wait_for_heatup);
 
       return wait_for_heatup;
     }

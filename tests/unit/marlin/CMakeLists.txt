@@ -22,3 +22,7 @@ add_executable(vector_tests vector_tests.cpp)
 target_include_directories(vector_tests PRIVATE ${CMAKE_SOURCE_DIR}/lib/Marlin/Marlin/src)
 target_link_libraries(vector_tests buddy_utils)
 add_catch_test(vector_tests)
+
+add_executable(temp_residency_tests temp_residency_tests.cpp)
+target_include_directories(temp_residency_tests PRIVATE ${CMAKE_SOURCE_DIR}/lib/Marlin/Marlin/src)
+add_catch_test(temp_residency_tests)
