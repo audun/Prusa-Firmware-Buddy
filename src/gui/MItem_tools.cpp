@@ -781,6 +781,15 @@ void MI_GCODE_VERIFY::OnChange([[maybe_unused]] size_t old_index) {
 }
 
 /*****************************************************************************/
+// MI_Z_ALIGN_AFTER_PRINT
+MI_Z_ALIGN_AFTER_PRINT::MI_Z_ALIGN_AFTER_PRINT()
+    : WI_ICON_SWITCH_OFF_ON_t(config_store().z_align_after_print.get(), _(label), nullptr, is_enabled_t::yes, is_hidden_t::no) {}
+
+void MI_Z_ALIGN_AFTER_PRINT::OnChange([[maybe_unused]] size_t old_index) {
+    config_store().z_align_after_print.set(value());
+}
+
+/*****************************************************************************/
 // MI_DEVHASH_IN_QR
 MI_DEVHASH_IN_QR::MI_DEVHASH_IN_QR()
     : WI_ICON_SWITCH_OFF_ON_t(config_store().devhash_in_qr.get(), _(label), nullptr, is_enabled_t::yes, is_hidden_t::no) {}

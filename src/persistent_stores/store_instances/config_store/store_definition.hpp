@@ -279,6 +279,8 @@ struct CurrentStore
     StoreItem<uint32_t, defaults::footer_draw_type, ItemFlag::user_interface, journal::hash("Footer Draw Type")> footer_draw_type;
     StoreItem<bool, true, ItemFlag::features | ItemFlag::common_misconfigurations, journal::hash("Fan Check Enabled")> fan_check_enabled;
     StoreItem<bool, true, ItemFlag::features | ItemFlag::common_misconfigurations, journal::hash("FS Autoload Enabled")> fs_autoload_enabled;
+    /// Run the Z motor alignment (G162 Z R0) at the end of every finished print, with the bed already parked low
+    StoreItem<bool, false, ItemFlag::features, journal::hash("Z Align After Print")> z_align_after_print;
 
     StoreItem<uint32_t, 0, ItemFlag::stats, journal::hash("Odometer Time")> odometer_time;
     StoreItem<uint8_t, 0, ItemFlag::network, journal::hash("Active NetDev")> active_netdev; // active network device

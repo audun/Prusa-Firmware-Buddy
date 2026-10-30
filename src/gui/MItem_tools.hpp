@@ -472,6 +472,14 @@ public:
     virtual void OnChange(size_t old_index) override;
 };
 
+class MI_Z_ALIGN_AFTER_PRINT : public WI_ICON_SWITCH_OFF_ON_t {
+    constexpr static const char *const label = N_("Z Align After Print");
+
+public:
+    MI_Z_ALIGN_AFTER_PRINT();
+    virtual void OnChange(size_t old_index) override;
+};
+
 class MI_DEVHASH_IN_QR : public WI_ICON_SWITCH_OFF_ON_t {
     constexpr static const char *const label = N_("Device Hash In QR");
 

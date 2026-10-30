@@ -186,11 +186,19 @@ void selftest::calib_Z(bool move_down_after) {
  *
  *#### Usage
  *
- *    G162 [ Z ]
+ *    G162 [ Z | R ]
  *
  *#### Parameters
  *
- *  - `Z` - Calibrate Z axis
+ * - `Z` - Calibrate Z axis: drive the bed into the hard stop at the end of the Z axis, push past it so both Z motors align, back off. Leaves Z unhomed.
+ * - `R` - [value] Return the bed to the working height (Z = 50) after the alignment. Ignored on XL.
+ *   - `0` - Do not return; the bed stays at the hard stop. Cheapest when the bed is already low, e.g. after a print
+ *   - `1` - (Default; iX defaults to 0) Return to Z = 50
+ *
+ *#### Examples
+ *
+ *    G162 Z    ; Align Z and return to Z = 50
+ *    G162 Z R0 ; Align Z and leave the bed at the bottom
  */
 
 void PrusaGcodeSuite::G162() {
@@ -199,7 +207,8 @@ void PrusaGcodeSuite::G162() {
         phase_stepping::EnsureDisabled ps_disabler;
 #endif
         marlin_server::FSM_Holder holder { PhasesSelftest::CalibZ };
-        selftest::calib_Z(PRINTER_IS_PRUSA_iX() ? false : true);
+        const bool move_down_after = parser.boolval('R', !PRINTER_IS_PRUSA_iX());
+        selftest::calib_Z(move_down_after);
     }
 }
 

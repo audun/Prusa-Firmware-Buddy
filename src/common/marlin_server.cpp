@@ -159,6 +159,10 @@
     #include "selftest_axis.h"
 #endif
 
+#if HAS_LOADCELL() && !PRINTER_IS_PRUSA_XL()
+    #include <calibration_z.hpp>
+#endif
+
 #if HAS_SHEET_PROFILES()
     #include "SteelSheets.hpp"
 #endif
@@ -748,6 +752,9 @@ static void retract();
 static void lift_head();
 static void retract_and_lift();
 static void park_head(bool is_pause);
+#if HAS_LOADCELL() && !PRINTER_IS_PRUSA_XL()
+static void align_z_after_print();
+#endif
 
 static void settings_load();
 
@@ -2885,7 +2892,14 @@ static void _server_print_loop(void) {
         server.print_state = State::Finishing_ParkHead;
         break;
     case State::Finishing_ParkHead:
+        if (idle_running) {
+            // Do not change state in the middle of a gcode, only in the outer loop
+            break;
+        }
         if (!is_processing()) {
+#if HAS_LOADCELL() && !PRINTER_IS_PRUSA_XL()
+            align_z_after_print();
+#endif
             server.print_state = State::Finished;
             // Don't clean up here - it will be done in State::Exit
             finalize_print(true);
@@ -3431,6 +3445,30 @@ static void park_head([[maybe_unused]] bool is_pause) {
         mapi::park(mapi::get_parking_position(mapi::ParkPosition::print_end).without_z_move());
     }
 }
+
+#if HAS_LOADCELL() && !PRINTER_IS_PRUSA_XL()
+/// Z motor alignment at the end of a finished print. The head is parked and
+/// the bed is already at least Z_MAX_POS - 50 low, so only the final push
+/// into the bottom hard stop remains. Leaves Z unhomed like G162 Z R0.
+static void align_z_after_print() {
+    if (!config_store().z_align_after_print.get() || server.print_is_serial) {
+        return;
+    }
+
+    // XY steppers were just disabled by pre_finalize_print(), so only Z can
+    // still be trusted. Without Z trust the bed was not parked low and the
+    // alignment would not be cheap; skip it.
+    if (!axes_home_level.is_homed(Z_AXIS, AxisHomeLevel::imprecise)) {
+        return;
+    }
+
+    #if HAS_PHASE_STEPPING()
+    phase_stepping::EnsureDisabled ps_disabler;
+    #endif
+    FSM_Holder holder { PhasesSelftest::CalibZ };
+    selftest::calib_Z(false);
+}
+#endif
 
 #if HAS_NOZZLE_CLEANER()
 void unpark_prime() {

@@ -53,6 +53,9 @@ using ScreenMenuSettingsBase = BasicScreenMenu<
 #if HAS_LOADCELL() && !HAS_INDX()
     MI_STUCK_FILAMENT_DETECTION,
 #endif
+#if HAS_LOADCELL() && !PRINTER_IS_PRUSA_XL()
+    MI_Z_ALIGN_AFTER_PRINT,
+#endif
 #if HAS_SWITCHABLE_AUTO_RETRACT()
     MI_AUTO_RETRACT_ENABLE,
 #endif
