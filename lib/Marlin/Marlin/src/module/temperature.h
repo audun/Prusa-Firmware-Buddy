@@ -370,7 +370,14 @@ class Temperature {
       static bool wait_for_bed(const bool no_wait_for_cooling=true);
 
       static void init_bed_frame_est_celsius();
-      static void wait_for_frame_heatup();
+
+      /// Wait until the bed frame has absorbed heat from the bed ("G29 G").
+      /// \param early_hotend_target when set, the hotend target of the picked tool is
+      ///        raised to this value as soon as the soak is predicted to finish within
+      ///        20 s, at once when there is nothing to wait for, or when the user skips
+      ///        the wait, so a following M109 R<temp> does not pay for the full reheat.
+      ///        The target is left untouched when the wait is aborted or in dry run.
+      static void wait_for_frame_heatup(std::optional<int16_t> early_hotend_target = std::nullopt);
 
     #endif // HAS_HEATED_BED
 

@@ -26,3 +26,7 @@ add_catch_test(vector_tests)
 add_executable(temp_residency_tests temp_residency_tests.cpp)
 target_include_directories(temp_residency_tests PRIVATE ${CMAKE_SOURCE_DIR}/lib/Marlin/Marlin/src)
 add_catch_test(temp_residency_tests)
+
+add_executable(bed_frame_soak_tests bed_frame_soak_tests.cpp)
+target_include_directories(bed_frame_soak_tests PRIVATE ${CMAKE_SOURCE_DIR}/lib/Marlin/Marlin/src)
+add_catch_test(bed_frame_soak_tests)

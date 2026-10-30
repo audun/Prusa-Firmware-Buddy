@@ -87,6 +87,7 @@
          unified_bed_leveling::g29_map_type;
   bool   unified_bed_leveling::g29_c_flag;
   bool   unified_bed_leveling::g29_wait_for_preheat;
+  std::optional<int16_t> unified_bed_leveling::g29_soak_hotend_target;
   float  unified_bed_leveling::g29_card_thickness = 0,
          unified_bed_leveling::g29_constant = 0;
   xy_bool_t unified_bed_leveling::xy_seen;
@@ -354,7 +355,7 @@
     if (g29_parameter_parsing()) return; // Abort on parameter error
 
     if (g29_wait_for_preheat) {
-        Temperature::wait_for_frame_heatup();
+        Temperature::wait_for_frame_heatup(g29_soak_hotend_target);
     }
 
     // Check for commands that require the printer to be homed
@@ -843,6 +844,15 @@
     g29_repetition_cnt = 0;
 
     g29_wait_for_preheat = parser.seen('G');
+    g29_soak_hotend_target = std::nullopt;
+    if (g29_wait_for_preheat && parser.seenval('S')) {
+      const float temp = parser.value_celsius();
+      if (!WITHIN(temp, 0, HEATER_0_MAXTEMP)) {
+        SERIAL_ECHOLNPGM("?(S)oak hotend target implausible.\n");
+        return UBL_ERR;
+      }
+      g29_soak_hotend_target = static_cast<int16_t>(temp);
+    }
 
     if (parser.seen('R')) {
       g29_repetition_cnt = parser.has_value() ? parser.value_int() : GRID_MAX_POINTS;

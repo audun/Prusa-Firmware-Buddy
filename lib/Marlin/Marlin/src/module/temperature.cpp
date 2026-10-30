@@ -129,6 +129,8 @@
     #include <puppies/INDX.hpp>
 #endif
 
+#include <module/temperature/bed_frame_soak.hpp>
+
 LOG_COMPONENT_REF(MarlinServer);
 
 // Rough estimate of room temperature
@@ -139,6 +141,9 @@ static constexpr float room_temperature = 25.0f;
 static constexpr float ejg2_frame_soak_min_target = 85.0f;
 static constexpr float ejg2_frame_heatup_speedup = 2.0f;
 #endif
+
+// How long before the predicted end of the frame heat soak the hotend target is raised
+static constexpr float early_hotend_lead_s = 20.0f;
 
 Temperature thermalManager;
 
@@ -669,11 +674,7 @@ void Temperature::updateTemperaturesFromRawValues() {
       } else {
         float dt = (now_millis - bed_frame_millis) / 1000.0f;
 
-        // A linear function that reaches estimated bed frame temperature after
-        // about 150s for 60C and about 10 minutes for 100C if starting with a
-        // cold bed. With a bed already partially warmed, the time is
-        // proportionally shorter.
-        float step = (0.06f + (100.0f - temp_bed.celsius) * 0.0015f) * dt;
+        float step = bed_frame_soak::rate_per_s(temp_bed.celsius) * dt;
 #if HAS_EXPANSION_JOINTS_GEN_2()
         if (config_store().ejg2_installed.get()) {
           step *= ejg2_frame_heatup_speedup;
@@ -1373,14 +1374,38 @@ void Temperature::isr() {
         }
     }
 
-    void Temperature::wait_for_frame_heatup() {
+    void Temperature::wait_for_frame_heatup(std::optional<int16_t> early_hotend_target) {
         // Keep everything heated up when absorbing heat
         buddy::SafetyTimerBlocker safety_timer_blocker;
 
-        constexpr float finish_threshold = 1.0f;
+        // One-shot, shared by every exit path that is followed by the reheat
+        bool hotend_target_applied = false;
+        const auto apply_early_hotend_target = [&](const char *why, float predicted_s) {
+            if (marlin_debug_flags & MARLIN_DEBUG_DRYRUN) {
+                return;
+            }
+            if (!early_hotend_target.has_value() || hotend_target_applied) {
+                return;
+            }
+            hotend_target_applied = true;
+
+            // Toolchangers and INDX can have no tool picked
+            const auto tool = PhysicalToolIndex::currently_selected_opt();
+            if (!tool.has_value()) {
+                log_info(MarlinServer, "Absorbing heat: no tool picked, hotend target %d not set", (int)*early_hotend_target);
+                return;
+            }
+
+            log_info(MarlinServer, "Absorbing heat: setting hotend target %d early (%s, predicted %d s left)",
+                (int)*early_hotend_target, why, (int)predicted_s);
+            Hotend::for_tool(*tool).set_nozzle_target_temp(*early_hotend_target);
+        };
+
+        using bed_frame_soak::finish_threshold;
 
         if (fabs(temp_bed.target - bed_frame_est_celsius) < finish_threshold) {
             log_info(MarlinServer, "Absorbing heat: already stable, continuing");
+            apply_early_hotend_target("already stable", 0);
             return;
         }
 
@@ -1392,17 +1417,23 @@ void Temperature::isr() {
         if (temp_bed.target < bed_frame_est_celsius) {
           // Do not wait for cooldown. Cooling is slow and propagated evenly across the bed, it won't warp the bed differently.
           log_info(MarlinServer, "Absorbing heat: target lower than actual temp, continuing");
+          apply_early_hotend_target("cooling", 0);
           return;
         }
 
         float soak_min_target = room_temperature;
 #if HAS_EXPANSION_JOINTS_GEN_2()
+        float speedup = 1.0f;
         if (config_store().ejg2_installed.get()) {
           soak_min_target = ejg2_frame_soak_min_target;
+          speedup = ejg2_frame_heatup_speedup;
         }
+#else
+        constexpr float speedup = 1.0f;
 #endif
         if (temp_bed.target <= soak_min_target) {
           log_info(MarlinServer, "Absorbing heat: target below soak threshold %.0f, continuing", (double)soak_min_target);
+          apply_early_hotend_target("below soak threshold", 0);
           return;
         }
 
@@ -1426,9 +1457,21 @@ void Temperature::isr() {
 
             idle(true);
 
+            if (early_hotend_target.has_value() && !hotend_target_applied) {
+              const float remaining_s = bed_frame_soak::seconds_remaining(temp_bed.target, bed_frame_est_celsius, temp_bed.celsius, speedup);
+              if (remaining_s <= early_hotend_lead_s) {
+                apply_early_hotend_target("soak nearly done", remaining_s);
+              }
+            }
+
             progress = std::max(progress, std::clamp(100 - ((fabs(temp_bed.target - bed_frame_est_celsius) - finish_threshold) / start_diff) * 100, 0.f, 100.f));
 
             status_guard.update<PrintStatusMessage::absorbing_heat>({ .current = progress, .target = 100 });
+        }
+
+        // Both a finished and a skipped soak are followed by the reheat; an aborted one is not
+        if (!planner.draining()) {
+          apply_early_hotend_target(skippable_operation.is_skip_requested() ? "skipped by user" : "soak done", 0);
         }
 
         MarlinUI::reset_status();

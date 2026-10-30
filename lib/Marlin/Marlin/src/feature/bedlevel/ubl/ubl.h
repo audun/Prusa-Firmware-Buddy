@@ -26,6 +26,8 @@
 #include "../../../module/motion.h"
 #include "../../../feature/print_area.h"
 
+#include <optional>
+
 #define UBL_VERSION "1.01"
 #define UBL_OK false
 #define UBL_ERR true
@@ -49,6 +51,8 @@ class unified_bed_leveling {
                   g29_map_type;
     static bool   g29_c_flag,
                   g29_wait_for_preheat;
+    /// Hotend target raised early at the end of a G29 G heat soak (S with G)
+    static std::optional<int16_t> g29_soak_hotend_target;
     static float  g29_card_thickness,
                   g29_constant;
     static xy_pos_t g29_pos;

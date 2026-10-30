@@ -63,7 +63,7 @@
  *
  *#### Usage
  *
- *    G29 [ A | B | C | D | E | F | H | I | J | L | P | Q | R | S | T | U | X | Y | | K | Q | W ]
+ *    G29 [ A | B | C | D | E | F | G | H | I | J | L | P | Q | R | S | T | U | X | Y | | K | Q | W ]
  *
  *#### Parameters
  *
@@ -86,6 +86,15 @@
  * - `F` - Fade the amount of Mesh Based Compensation over a specified height. At the
  *         specified height, no correction is applied and natural printer kenimatics take over. If no
  *         number is specified for the command, 10mm is assumed to be reasonable.
+ * - `G` - Absorb heat: wait until the bed frame is estimated to have reached the bed
+ *         target temperature before continuing. Returns at once when the frame is already
+ *         stable, the target is below the soak threshold or below the current estimate.
+ *         Skippable from the screen.
+ *   - `G S<temp>` - raise the hotend target of the picked tool to <temp> when the soak is
+ *                   predicted to finish within 20 s, or at once when there is nothing to
+ *                   wait for or the user skips the soak, so a following `M109 R<temp>`
+ *                   does not pay for the full reheat. The target is left untouched when
+ *                   the wait is aborted or in dry run.
  * - `H` - Height
  *   - `H P2` - specify the Height to raise the nozzle after each manual probe of the bed.
  *              If omitted, the nozzle will raise by Z_CLEARANCE_BETWEEN_PROBES.
@@ -213,14 +222,8 @@
  * - `R` - Repeat this command the specified number of times. If no number is specified the
  *         command will be repeated GRID_MAX_POINTS_X * GRID_MAX_POINTS_Y times.
  *
- * - `S` - Store the current Mesh in the Activated area of the EEPROM. It will also store the
- *         current state of the Unified Bed Leveling system in the EEPROM.
- *
- *   - `S#` - Store the current Mesh at the specified location in EEPROM. Activate this location
- *            for subsequent Load and Store operations. Valid storage slot numbers begin at 0 and
- *            extend to a limit related to the available EEPROM storage.
- *
- *   - `S-1` - Print the current Mesh as G-code that can be used to restore the mesh anytime.
+ * - `S` - With `G`: hotend target to apply near the end of the heat soak, see `G`.
+ *         Without `G` the parameter is ignored. Mesh storage slots are not available.
  *
  * - `T` - Display the Mesh Map Topology.
  *         'T' can be used alone (e.g., G29 T) or in combination with most of the other commands.
