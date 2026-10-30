@@ -490,6 +490,145 @@ lives, and the main risk.
 
 ---
 
+## 8. Slicer half: the "quick iteration" CORE One profile
+
+Backlog item 14, delivered as a PrusaSlicer printer preset so it needs no
+firmware change to be useful today, with switches for the firmware work
+below once it ships. Files:
+
+- `doc/print_startup_profiles/` in this repository: two importable user
+  presets for PrusaSlicer 2.9.x (`Prusa CORE One 0.4 nozzle - quick
+  start.ini`, `Prusa CORE One HF0.4 nozzle - quick start.ini`), the
+  generator `make_quick_start_ini.py` that holds the G-code and rebuilds the
+  presets from any `PrusaResearch.ini` vendor bundle, and a README with the
+  install steps.
+- audun/PrusaSlicer, branch `quick-start-coreone`: the same start and end
+  G-code as a bundled printer variant "Prusa CORE One & CORE One+ (quick
+  start)" in `preset-printer-coreone.yaml`, selected by a new `quick_start`
+  printer feature and the `c1quick` printer config in `vendor.yaml`. The
+  stock variant is untouched and still wins whenever `quick_start` is off.
+
+### 8.1 Firmware items the profile is written against
+
+The profile refers to six firmware items. They are the backlog entries
+below, numbered F1 to F6 for the slicer side; none of them has shipped on
+this branch yet, so every G-code that needs one is gated (section 8.3).
+
+| Item | Backlog | Firmware side | What the profile emits |
+|------|---------|---------------|------------------------|
+| F1 | 1 | Preheat preset for PLA/PETG raised to print temperature − 10 | Probes PLA and PETG at `first_layer_temperature − 10` (the `HT_MBL10` rule applied by filament type) |
+| F2 | 7, 20 | `G29 P7`: tap a few check points, keep the RAM mesh if they agree, otherwise run the `P1` sequence | `G29 P7` instead of the two `G29 P1` lines |
+| F3 | 18 | Prep while idle; position trust kept until motors off, crash or power cycle | `G28 Q`, end G-code `M84 E` only |
+| F4 | 19 | `G162 Z R<height>`: Z alignment with a configurable return height, `R0` = stay low | `G162 Z R0` at print end |
+| F5 | 4, 21 | `G29 G S<temp>`: raise the hotend target when the soak is nearly done | Idle drop only when a soak is expected; `G29 G S<probe>` where it stays |
+| F6 | 23 | `M190` returns at once when the bed has been resident for 5 s | Nothing; `M190 R` is kept |
+
+Proposed syntax, chosen so it is unambiguous against today's parsers:
+
+- `G29 P7`: phases 7 and 8 are unused in `ubl_G29.cpp`
+  (`g29_parameter_parsing` accepts 0–6, 9, 10). Stock firmware answers
+  "?(P)hase value invalid" and skips the command, so the mesh would stay
+  invalid; that is why the flag is needed. An optional `C<tolerance>` can
+  carry the tolerance in mm (`C` is only consumed by `P3` and `Q2` today).
+- `G29 G S<temp>`: `S` is not read anywhere in the Buddy `G29` parser, so
+  stock firmware treats the line as a plain `G29 G` and the following
+  `M109 R<probe>` does the reheat.
+- `G162 Z R<height>`: `G162` only reads `Z` today; stock firmware would run
+  the full alignment and return to Z 50 (about 30 s), which is why the flag
+  is required on top of `QUICKSTART_Z_ALIGN`.
+- `M862.6 P"Quick start"`: feature string the new firmware must add to the
+  `M862.6` list and to the `GCodeInfo` compare; on stock firmware the
+  unknown feature trips `Check::unsupported_features`, so the user is warned
+  in the preview before a `QUICKSTART_FW` profile runs on old firmware.
+
+### 8.2 What the start and end G-code do differently
+
+Every stock placeholder expression is kept: the `M862` checks, the `M555`
+print area, both chamber-temperature branches, the FLEX retraction branches
+and the `is_nil(idle_temperature)` fallback. The changes:
+
+1. **Probing temperature.** The stock ternary gains one branch:
+   `filament_type == "PLA" or "PETG"` (or the `HT_MBL10` note) probes at
+   `first_layer_temperature − 10`. `MBL160`, PC/PA (−25), FLEX/TPU/TPE (210)
+   and the 170 default are unchanged. Prusament PLA @COREONE (230) probes at
+   220, Prusament PETG (250) at 240.
+2. **Fan-assisted cooling.** `M109 R<probe> F` followed by `M107`, so a
+   nozzle left hotter than the probing temperature is cooled with the part
+   fan instead of passively. The firmware restores the fan itself; the
+   `M107` makes the state explicit.
+3. **Homing.** `G28 Q` (home only if not trusted). No `P`, so sheet
+   detection still runs. This only saves time once F3 ships or when the end
+   G-code of the previous print left the XY motors enabled, which this
+   profile does (`M84 E`).
+4. **Idle drop.** The `M104 S<idle>` drop before `M190`, and its `M106 S70`
+   helper, are emitted only when a soak is expected: a minimal chamber
+   temperature is set or the first layer bed temperature is above 60 °C.
+   PLA at 60 °C on a preheated CORE One+ does not soak, so the nozzle stays
+   at the probing temperature and the second `M109 R<probe>` is dropped
+   (hotend residency is tracked continuously, so it would return at once).
+   Where the drop stays (PETG and up, chamber materials): `G29 G S<probe>`
+   with `QUICKSTART_FW`, else the stock `G29 G`; then `M109 R<probe>`.
+5. **Mesh.** `G29 P9` cleanup as stock, then `G29 P7` with `QUICKSTART_FW`
+   or the stock `G29 P1` pair without it; `G29 P3.2`, `G29 P3.13`, `G29 A`
+   are kept in both cases so the result is the same whether `P7` kept or
+   re-probed the mesh.
+6. **Purge.** 8.5 mm over X 249 → 227 instead of 17 mm over 249 → 205, same
+   feedrates, same 3 mm + 3 mm wipe pattern (to X 224 and 221). The purge
+   start is unchanged, so the `M555` widening and the stock purge-area probe
+   window still cover it.
+7. **End G-code.** `M84 E` instead of `M84 X Y E`; `M104 S<idle>` instead of
+   `M104 S0` with `QUICKSTART_KEEP_WARM` (170 fallback when the filament has
+   no idle temperature, the 30 min safety timer is the backstop);
+   `G162 Z R0` after park and `G4`, before `M84`, with `QUICKSTART_FW` and
+   `QUICKSTART_Z_ALIGN`.
+
+The MMU variant of the CORE One is out of scope; the profile is single-tool.
+
+### 8.3 Flags
+
+Keywords in Printer Settings → Notes (`printer_notes`), one per line, all
+off in the shipped files. The stock `PRINTER_MODEL_COREONE`, `PG` and
+`NO_TEMPLATES` keywords stay, so stock print and filament profiles remain
+compatible.
+
+| Flag | Needs | Effect |
+|------|-------|--------|
+| `QUICKSTART_FW` | F2, F4, F5 firmware | `G29 P7`, `G29 G S<probe>`, `M862.6 P"Quick start"` |
+| `QUICKSTART_KEEP_WARM` | nothing | Nozzle left at idle temperature after the print |
+| `QUICKSTART_Z_ALIGN` | `QUICKSTART_FW` | `G162 Z R0` at print end; without `QUICKSTART_FW` the firmware's own end-of-print toggle (F4) is relied on |
+
+### 8.4 Import
+
+1. Install the stock CORE One printer (0.4 or HF0.4) in the Configuration
+   Wizard so the parent preset and the `@COREONE` filaments exist.
+2. Close PrusaSlicer and copy the `.ini` into the user printer folder
+   (`~/.config/PrusaSlicer/printer/` on Linux, `%APPDATA%\PrusaSlicer\printer\`
+   on Windows, `~/Library/Application Support/PrusaSlicer/printer/` on
+   macOS). The file name without `.ini` becomes the preset name.
+3. Start PrusaSlicer and select the preset; add flags under Printer
+   Settings → Notes as needed.
+
+File → Import → Import Config also loads the file but creates default print
+and filament presets alongside it and drops the `inherits` link; the README
+explains the cleanup if that route is used. To rebuild the presets from a
+newer vendor bundle run
+`python3 -I make_quick_start_ini.py PrusaResearch.ini`.
+
+### 8.5 Validation done
+
+Sliced headless with PrusaSlicer 2.9.6 (Flathub build): a 20 mm cube and a
+150 × 150 × 2 mm plate, with the stock `0.20mm SPEED @COREONE 0.4` print
+profile and the stock Prusament PLA and PETG CORE One filaments, for the
+stock printer preset, the quick start preset and its flag variants
+(`QUICKSTART_FW`, `QUICKSTART_KEEP_WARM`, all three). All 20 slices
+succeeded, no placeholder was left unevaluated, `M555` was identical to
+stock for both models (`X115 Y96 W32 H24` for the cube, `X50 Y31 W150 H154`
+for the plate), and the start/end diffs against stock contained only the
+changes in 8.2. Nothing has been printed yet; the first real test is the
+tap rejection rate at 220 °C (section 7).
+
+---
+
 ## Appendix: file map
 
 | Topic                                   | Location |
@@ -514,3 +653,4 @@ lives, and the main risk.
 | Idle heater safety timer (30 min)       | `src/feature/safety_timer/safety_timer.hpp` |
 | Status phases shown on screen           | `src/feature/print_status_message/print_status_message.hpp` |
 | Slicer start/end G-code                 | PrusaSlicer `resources/presets/prusa-research-fff/PrusaResearch/preset-printer-{coreone,mk4,xl,mini,coreone-indx}.yaml` |
+| Quick iteration profile                 | `doc/print_startup_profiles/` (importable `.ini`, generator, README); audun/PrusaSlicer branch `quick-start-coreone` |
