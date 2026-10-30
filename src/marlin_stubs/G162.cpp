@@ -2,6 +2,7 @@
 #include "../../../lib/Marlin/Marlin/src/module/motion.h"
 #include "../../../lib/Marlin/Marlin/src/module/planner.h"
 #include <module/endstops.h>
+#include <feature/bedlevel/bedlevel.h>
 
 #include "PrusaGcodeSuite.hpp"
 #include <stdint.h>
@@ -75,6 +76,7 @@ void selftest::calib_Z([[maybe_unused]] bool move_down_after) {
     auto result = config_store().selftest_result.get();
     result.set_zalign(TestResult::failed);
     config_store().selftest_result.set(result);
+    ubl.invalidate_mesh_validity("Z align");
 
     // prevent collision with tool
     ensure_tool_is_in_dock_area();
@@ -132,6 +134,7 @@ void selftest::calib_Z(bool move_down_after) {
     auto result = config_store().selftest_result.get();
     result.set_zalign(TestResult::failed);
     config_store().selftest_result.set(result);
+    ubl.invalidate_mesh_validity("Z align");
 
     // backup original acceleration/feedrates and reset defaults for calibration
     static constexpr float def_feedrate[] = DEFAULT_MAX_FEEDRATE;

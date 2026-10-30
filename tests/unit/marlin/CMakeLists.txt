@@ -30,3 +30,9 @@ add_catch_test(temp_residency_tests)
 add_executable(bed_frame_soak_tests bed_frame_soak_tests.cpp)
 target_include_directories(bed_frame_soak_tests PRIVATE ${CMAKE_SOURCE_DIR}/lib/Marlin/Marlin/src)
 add_catch_test(bed_frame_soak_tests)
+
+add_executable(mesh_verify_points_tests mesh_verify_points_tests.cpp)
+target_include_directories(
+  mesh_verify_points_tests PRIVATE ${CMAKE_SOURCE_DIR}/lib/Marlin/Marlin/src/feature/bedlevel/ubl
+  )
+add_catch_test(mesh_verify_points_tests)

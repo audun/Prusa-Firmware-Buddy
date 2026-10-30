@@ -73,6 +73,12 @@
 
   volatile int unified_bed_leveling::encoder_diff;
 
+  mesh_verify::IndexRange unified_bed_leveling::mesh_probed_range;
+  int16_t unified_bed_leveling::mesh_bed_target = 0;
+  float unified_bed_leveling::mesh_probe_offset_z = 0;
+  bool unified_bed_leveling::mesh_valid = false;
+  bool unified_bed_leveling::mesh_fresh = false;
+
   unified_bed_leveling::unified_bed_leveling() {
     reset();
   }
@@ -82,6 +88,7 @@
     set_bed_leveling_enabled(false);
     storage_slot = -1;
     ZERO(z_values);
+    mesh_valid = mesh_fresh = false;
     #if ENABLED(EXTENSIBLE_UI)
       for (uint8_t x = 0; x < GRID_MAX_POINTS_X; x++)
         for (uint8_t y = 0; y < GRID_MAX_POINTS_Y; y++)
@@ -93,6 +100,7 @@
   void unified_bed_leveling::invalidate() {
     set_bed_leveling_enabled(false);
     set_all_mesh_points_to_value(NAN);
+    mesh_valid = mesh_fresh = false;
   }
 
   void unified_bed_leveling::set_all_mesh_points_to_value(const float value) {

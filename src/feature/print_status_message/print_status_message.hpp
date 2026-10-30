@@ -27,6 +27,7 @@ struct PrintStatusMessage {
         calibrating_axis,
         probing_bed,
         additional_probing,
+        verifying_mesh,
 
         dwelling,
 
@@ -108,6 +109,7 @@ struct PrintStatusMessage {
         TypeRecord<Type::calibrating_axis, PrintStatusMessageDataAxisProgress>,
         TypeRecord<Type::probing_bed, PrintStatusMessageDataProgress>,
         TypeRecord<Type::additional_probing, PrintStatusMessageDataProgress>,
+        TypeRecord<Type::verifying_mesh, PrintStatusMessageDataProgress>,
         TypeRecord<Type::dwelling, PrintStatusMessageDataProgress>,
         TypeRecord<Type::absorbing_heat, PrintStatusMessageDataProgress>,
         TypeRecord<Type::waiting_for_hotend_temp, PrintStatusMessageDataToolProgress>,

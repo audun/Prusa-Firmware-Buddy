@@ -37,8 +37,15 @@ void PrintArea::set_bounding_rect(rect_t new_bounding_rect) {
 #endif
 
 #if HAS_LEVELING
-  if (enlarged)
+  if (enlarged) {
+  #if ENABLED(AUTO_BED_LEVELING_UBL)
+    // A mesh must not be applied beyond the area it was probed for. Its data
+    // is kept: G29 P11 can verify and reuse it when it covers the next area.
+    set_bed_leveling_enabled(false);
+  #else
     reset_bed_level();
+  #endif
+  }
 #else
   // #error dead code found by automatic analyses (see BFW-5461)
   UNUSED(enlarged);

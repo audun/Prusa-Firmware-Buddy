@@ -1214,6 +1214,8 @@ void static finalize_print(bool finished) {
     // BFW-5085
     print_area.reset_bounding_rect();
 #endif
+    // The mesh stays valid, but the next G29 P11 shall tap it again
+    ubl.clear_mesh_fresh();
 
 #if HAS_CHAMBER_API()
     buddy::chamber().reset();
@@ -2916,6 +2918,7 @@ static void _server_print_loop(void) {
 
 #if HAS_CRASH_DETECTION()
     case State::CrashRecovery_Begin: {
+        ubl.invalidate_mesh_validity("crash recovery");
         // pause and set correct resume position: this will stop media reading and clear the queue
         // TODO: this is completely broken for crashes coming from serial printing
         process_pausing_begin_state(Pause_Type::Crash);

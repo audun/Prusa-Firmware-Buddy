@@ -25,6 +25,7 @@
 
 #include "../../../module/motion.h"
 #include "../../../feature/print_area.h"
+#include "mesh_verify_points.hpp"
 
 #include <optional>
 
@@ -59,6 +60,8 @@ class unified_bed_leveling {
     static xy_bool_t xy_seen;
     static xy_float_t g29_size;
     static bool g29_size_seen;
+    static uint8_t g29_verify_points;
+    static float g29_verify_tolerance;
 
     #if HAS_BED_PROBE
       static int  g29_grid_size;
@@ -123,6 +126,56 @@ class unified_bed_leveling {
 
     bool g29_probing_failed = false;
     bool g29_nozzle_cleaning_failed = false;
+
+    /// Why the mesh in z_values can or cannot be reused without a full probe.
+    enum class MeshVerifyResult : uint8_t {
+      verified,       ///< taps agreed with z_values, mesh kept (and activated when complete)
+      fresh,          ///< mesh probed or verified since the last print ended, nothing tapped
+      mismatch,       ///< a tap differed by more than the tolerance, or no mesh point was reachable
+      mesh_invalid,   ///< no trustworthy mesh (see is_mesh_valid_for), nothing tapped
+      probing_failed, ///< a tap failed or the planner is draining; g29_probing_failed is set on a failed tap
+    };
+
+    /// Major grid index range covered by the probe area of the last complete G29 P1.
+    static mesh_verify::IndexRange mesh_probed_range;
+    /// Bed target temperature in effect when z_values was last fully probed.
+    static int16_t mesh_bed_target;
+    /// Probe Z offset in effect when z_values was last fully probed (folded into every probed value).
+    static float mesh_probe_offset_z;
+    /// z_values holds a complete G29 P1 result that nothing has disturbed since.
+    static bool mesh_valid;
+    /// mesh_valid, and probed or verified since the last print ended. G29 P11
+    /// taps nothing while this holds. Cleared at the end of every print and by
+    /// anything that clears mesh_valid.
+    static bool mesh_fresh;
+
+    /// Bed target may differ from the one recorded with the mesh by this much (°C).
+    static constexpr int16_t mesh_bed_target_tolerance = 10;
+
+    /// Mark z_values as not reusable by G29 P11. reason is logged when the mesh was valid.
+    static void invalidate_mesh_validity(const char *reason);
+    /// Make the next G29 P11 tap the check points even though the mesh is valid.
+    static void clear_mesh_fresh();
+    /// Record that a non-extending probe_major_points() over probe_area completed without failure.
+    static void mark_mesh_probed(const PrintArea::rect_t &probe_area);
+    /// True when z_values can be reused for probe_area at the current bed target and probe Z offset.
+    static bool is_mesh_valid_for(const PrintArea::rect_t &probe_area);
+    /// Probe rectangle G29 P1/P11 use: the explicit X/Y/W/H of the current G29,
+    /// otherwise the print area enlarged by one major grid step.
+    static PrintArea::rect_t g29_probe_area();
+
+    /**
+     * Compare a few taps with the mesh in z_values (G29 P11).
+     * Taps nothing when the mesh is not valid for probe_area (mesh_invalid), when a check
+     * point holds no value (mesh_invalid), or when the mesh is fresh and force_measure is
+     * false (fresh). On verified and fresh the mesh is activated when it has no NaN and
+     * marked fresh. Does not invalidate or re-probe anything itself.
+     * @param points number of check points, 3-5 (corners of the probe area, 5th is the centre)
+     * @param tolerance maximum allowed |measured - stored| in mm
+     * @param include_home_point also tap the Z safe homing point and expect 0
+     * @param force_measure tap even when the mesh is fresh
+     */
+    static MeshVerifyResult verify_mesh(const PrintArea::rect_t &probe_area, uint8_t points, float tolerance, bool include_home_point, bool force_measure);
 
     unified_bed_leveling();
 

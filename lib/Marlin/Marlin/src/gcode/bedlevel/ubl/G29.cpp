@@ -63,7 +63,9 @@
  *
  *#### Usage
  *
- *    G29 [ A | B | C | D | E | F | G | H | I | J | L | P | Q | R | S | T | U | X | Y | | K | Q | W ]
+ *    G29 [ A | B | C | D | E | F | G | H | I | J | L | M | N | O | P | Q | R | S | T | U | X | Y | Z | K | W ]
+ *
+ *    G29 P11 N4 O0.05 ; verify the previous mesh at four corners of the print area, re-probe on mismatch
  *
  *#### Parameters
  *
@@ -113,6 +115,13 @@
  *
  * - `L#` - Load Mesh from the specified location in the EEPROM. Set this location as activated
  *          for subsequent Load and Store operations.
+ *
+ * - `M` - With P11, measure the check points even when the mesh was probed or verified since the
+ *         last print ended (by default P11 then taps nothing).
+ * - `N` - With P11, number of check points, 3-5 (default 4): the outermost major mesh points of the
+ *         probe area; 5 adds the centre point.
+ * - `O` - With P11, tolerance in mm between a check tap and the stored mesh value (default 0.05).
+ *         `T` is the map type, so the tolerance uses `O`.
  *
  *   The P or Phase commands are used for the bulk of the work to setup a Mesh. In general, your Mesh will
  *   start off being initialized with a G29 P0 or a G29 P1. Further refinement of the Mesh happens with
@@ -215,6 +224,14 @@
  *                    you should have the Mesh adjusted for a Mean Height of 0.00 and the Z-Probe measuring
  *                    0.000 at the Z Home location.
  *
+ *   - `11` - Verify the mesh in RAM instead of re-probing it. Requires a complete P1 result, not edited
+ *            since (P5 C, P6, M420 C, M421, I, Q), taken with the same probe Z offset, a bed target
+ *            within 10 °C and a probe area that covers the current one; otherwise, or when any check tap differs from the mesh by more than `O`, the mesh is
+ *            invalidated and the area is probed as with P1. On success the mesh is kept and, when
+ *            complete, activated. Check points outside the probe's reach are skipped; when none is
+ *            reachable the area is probed. `G29 P1 ... C` after a successful P11 probes nothing.
+ *            See `M`, `N`, `O`, `Z`.
+ *
  * - `Q` - Load specified Test Pattern to assist in checking correct operation of system. This
  *         command is not anticipated to be of much value to the typical user. It is intended
  *         for developers to help them verify correct operation of the Unified Bed Leveling System.
@@ -240,6 +257,8 @@
  * - `X` - X Location for this command
  *
  * - `Y` - Y Location for this command
+ *
+ * - `Z` - With P11, also tap the Z homing point and require it to read 0 within the tolerance.
  *
  * With UBL_DEVEL_DEBUGGING:
  *

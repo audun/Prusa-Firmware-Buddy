@@ -71,6 +71,7 @@ void GcodeSuite::M421() {
   else if (!WITHIN(ij.x, 0, GRID_MAX_POINTS_X - 1) || !WITHIN(ij.y, 0, GRID_MAX_POINTS_Y - 1))
     SERIAL_ERROR_MSG(MSG_ERR_MESH_XY);
   else {
+    ubl.invalidate_mesh_validity("mesh edited");
     float &zval = ubl.z_values[ij.x][ij.y];
     zval = hasN ? NAN : parser.value_linear_units() + (hasQ ? zval : 0);
     #if ENABLED(EXTENSIBLE_UI)

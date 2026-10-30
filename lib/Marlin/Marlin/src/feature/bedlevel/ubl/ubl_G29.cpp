@@ -72,8 +72,12 @@
     #include "power_panic.hpp"
   #endif
 
+  #include "mesh_verify_points.hpp"
+  #include "metric.h"
+
   #include <math.h>
   #include <algorithm>
+  #include <array>
   #include <logging/log.hpp>
 
   LOG_COMPONENT_REF(Marlin);
@@ -94,6 +98,8 @@
   xy_pos_t unified_bed_leveling::g29_pos;
   xy_float_t unified_bed_leveling::g29_size;
   bool unified_bed_leveling::g29_size_seen;
+  uint8_t unified_bed_leveling::g29_verify_points;
+  float unified_bed_leveling::g29_verify_tolerance;
 
   std::optional<unified_bed_leveling::MeasuredZ> unified_bed_leveling::g29_min_max_measured_z;
 
@@ -359,7 +365,7 @@
     }
 
     // Check for commands that require the printer to be homed
-    const bool may_move = g29_phase_value == 1 || g29_phase_value == 2 || g29_phase_value == 4;
+    const bool may_move = g29_phase_value == 1 || g29_phase_value == 2 || g29_phase_value == 4 || g29_phase_value == 11;
     if (may_move) {
       if (axes_need_homing()) {
         gcode.process_subcommands_now_P(PSTR("G28 O"));
@@ -369,6 +375,7 @@
     // Invalidate Mesh Points. This command is a little bit asymmetrical because
     // it directly specifies the repetition count and does not use the 'R' parameter.
     if (parser.seen('I')) {
+      invalidate_mesh_validity("G29 I");
       uint8_t cnt = 0;
       g29_repetition_cnt = parser.has_value() ? parser.value_int() : 1;
       if (g29_repetition_cnt >= GRID_MAX_POINTS || g29_repetition_cnt < 0) {
@@ -404,6 +411,7 @@
         return;
       }
       SERIAL_ECHOLNPGM("Loading test_pattern values.\n");
+      invalidate_mesh_validity("G29 Q");
       switch (test_pattern) {
 
         #if ENABLED(UBL_DEVEL_DEBUGGING)
@@ -484,13 +492,29 @@
               crash_s.set_gcode_replay_flags(Crash_s::RECOVER_AXIS_STATE);
             #endif
 
-            const auto probe_area = ((xy_seen.x || xy_seen.y) && g29_size_seen) ?
-              PrintArea::rect_t(g29_pos, g29_pos + g29_size) :
-              // probe area is print area enlarged by one major point
-              print_area.get_bounding_rect().inset(-MESH_X_DIST * GRID_MAJOR_STEP,
-                                                   -MESH_Y_DIST * GRID_MAJOR_STEP);
+            probe_major_points(g29_probe_area(), parser.seen('T'), parser.seen('E'), extend_mesh);
 
-            probe_major_points(probe_area, parser.seen('T'), parser.seen('E'), extend_mesh);
+            report_current_position();
+            probe_deployed = true;
+          } break;
+
+          case 11: {
+            //
+            // Verify the mesh in RAM with a few taps, re-probe the area only when they disagree
+            //
+            #if HAS_CRASH_DETECTION()
+              // we're going to move to an absolute position: inhibit XYZ repositioning
+              crash_s.set_gcode_replay_flags(Crash_s::RECOVER_AXIS_STATE);
+            #endif
+
+            const auto probe_area = g29_probe_area();
+            const bool include_home_point = TERN0(Z_SAFE_HOMING, parser.seen('Z'));
+            const auto result = verify_mesh(probe_area, g29_verify_points, g29_verify_tolerance, include_home_point, parser.seen('M'));
+            if (result == MeshVerifyResult::mismatch || result == MeshVerifyResult::mesh_invalid) {
+              invalidate();
+              SERIAL_ECHOLNPGM("Mesh verification failed. Probing mesh.");
+              probe_major_points(probe_area, parser.seen('T'), parser.seen('E'), false);
+            }
 
             report_current_position();
             probe_deployed = true;
@@ -679,7 +703,8 @@
     const float sigma = SQRT(sum_of_diff_squared / (n + 1));
     SERIAL_ECHOLNPAIR_F("Standard Deviation: ", sigma, 6);
 
-    if (cflag)
+    if (cflag) {
+      invalidate_mesh_validity("mesh edited");
       for (uint8_t x = 0; x < GRID_MAX_POINTS_X; x++)
         for (uint8_t y = 0; y < GRID_MAX_POINTS_Y; y++)
           if (!isnan(z_values[x][y])) {
@@ -688,9 +713,11 @@
               ExtUI::onMeshUpdate(x, y, z_values[x][y]);
             #endif
           }
+    }
   }
 
   void unified_bed_leveling::shift_mesh_height() {
+    invalidate_mesh_validity("mesh edited");
     for (uint8_t x = 0; x < GRID_MAX_POINTS_X; x++)
       for (uint8_t y = 0; y < GRID_MAX_POINTS_Y; y++)
         if (!isnan(z_values[x][y])) {
@@ -701,7 +728,79 @@
         }
   }
 
+  PrintArea::rect_t unified_bed_leveling::g29_probe_area() {
+    return ((xy_seen.x || xy_seen.y) && g29_size_seen) ?
+      PrintArea::rect_t(g29_pos, g29_pos + g29_size) :
+      // probe area is print area enlarged by one major point
+      print_area.get_bounding_rect().inset(-MESH_X_DIST * GRID_MAJOR_STEP,
+                                           -MESH_Y_DIST * GRID_MAJOR_STEP);
+  }
+
+  static constexpr mesh_verify::GridGeometry mesh_grid_geometry {
+    .min_x = MESH_MIN_X,
+    .min_y = MESH_MIN_Y,
+    .x_dist = MESH_X_DIST,
+    .y_dist = MESH_Y_DIST,
+    .points_x = GRID_MAX_POINTS_X,
+    .points_y = GRID_MAX_POINTS_Y,
+    .border = GRID_BORDER,
+    .major_step = GRID_MAJOR_STEP,
+  };
+
+  static mesh_verify::IndexRange major_index_range(const PrintArea::rect_t &r) {
+    return mesh_verify::major_index_range(mesh_grid_geometry, { r.a.x, r.a.y, r.b.x, r.b.y });
+  }
+
+  void unified_bed_leveling::mark_mesh_probed(const PrintArea::rect_t &probe_area) {
+    mesh_probed_range = major_index_range(probe_area);
+    mesh_bed_target = thermalManager.degTargetBed();
+    mesh_probe_offset_z = probe_offset.z;
+    mesh_valid = !mesh_probed_range.empty();
+    mesh_fresh = mesh_valid;
+  }
+
+  void unified_bed_leveling::invalidate_mesh_validity(const char *reason) {
+    if (mesh_valid) {
+      log_info(Marlin, "Mesh invalidated: %s", reason);
+    }
+    mesh_valid = false;
+    mesh_fresh = false;
+  }
+
+  void unified_bed_leveling::clear_mesh_fresh() {
+    mesh_fresh = false;
+  }
+
+  bool unified_bed_leveling::is_mesh_valid_for(const PrintArea::rect_t &probe_area) {
+    if (!mesh_valid) return false;
+    if (probe_offset.z != mesh_probe_offset_z) return false;
+    if (std::abs(thermalManager.degTargetBed() - mesh_bed_target) > mesh_bed_target_tolerance) return false;
+    const auto wanted = major_index_range(probe_area);
+    if (wanted.empty()) return false;
+    return mesh_probed_range.covers(wanted);
+  }
+
 #if HAS_BED_PROBE
+  #if UBL_TRAVEL_ACCELERATION
+    /// Lowers the travel acceleration for the probing moves, restores the previous one when destroyed.
+    class UblTravelAccelerationOverride {
+      public:
+        UblTravelAccelerationOverride() : saved(planner.settings.travel_acceleration) { apply(UBL_TRAVEL_ACCELERATION); }
+        ~UblTravelAccelerationOverride() { apply(saved); }
+        UblTravelAccelerationOverride(const UblTravelAccelerationOverride &) = delete;
+        UblTravelAccelerationOverride &operator=(const UblTravelAccelerationOverride &) = delete;
+
+      private:
+        using Acceleration = decltype(planner.settings.travel_acceleration);
+        static void apply(Acceleration acceleration) {
+          auto s = planner.user_settings;
+          s.travel_acceleration = acceleration;
+          planner.apply_settings(s);
+        }
+        const Acceleration saved;
+    };
+  #endif
+
   void unified_bed_leveling::probe_major_points(const PrintArea::rect_t &probe_area, const bool do_ubl_mesh_map, const bool stow_probe, const bool extend_mesh) {
     save_ubl_active_state_and_disable();  // No bed level correction so only raw data is obtained
     pressure_advance::PressureAdvanceDisabler pa_disabler; // Reduce move delays as we don't extrude
@@ -712,12 +811,7 @@
     #endif
 
     #if UBL_TRAVEL_ACCELERATION
-      auto saved_acceleration = planner.settings.travel_acceleration;
-      {
-        auto s = planner.user_settings;
-        s.travel_acceleration = UBL_TRAVEL_ACCELERATION;
-        planner.apply_settings(s);
-      }
+      UblTravelAccelerationOverride travel_acceleration_override;
     #endif
 
     PrintStatusMessageGuard statusGuard;
@@ -823,16 +917,160 @@
       move_z_after_probing();
     #endif
 
+    if (!extend_mesh && !ubl.g29_probing_failed && !planner.draining()) {
+      mark_mesh_probed(probe_area);
+    }
+
+    restore_ubl_active_state_and_leave();
+  }
+
+  METRIC_DEF(metric_mesh_verify, "mesh_verify", METRIC_VALUE_CUSTOM, 0, METRIC_ENABLED);
+
+  unified_bed_leveling::MeshVerifyResult unified_bed_leveling::verify_mesh(const PrintArea::rect_t &probe_area, uint8_t points, float tolerance, bool include_home_point, bool force_measure) {
+    const auto report = [&](MeshVerifyResult result, const char *name, unsigned tapped, float max_diff) {
+      log_info(Marlin, "Mesh verify: %s, %u taps, max diff %.3f mm, tol %.3f mm", name, tapped, (double)max_diff, (double)tolerance);
+      metric_record_custom(&metric_mesh_verify, " r=\"%s\",n=%u,d=%.3f", name, tapped, (double)max_diff);
+      return result;
+    };
+
+    if (!is_mesh_valid_for(probe_area)) {
+      return report(MeshVerifyResult::mesh_invalid, "invalid", 0, 0);
+    }
+    if (mesh_fresh && !force_measure) {
+      if (mesh_is_valid()) set_bed_leveling_enabled(true);
+      return report(MeshVerifyResult::fresh, "fresh", 0, 0);
+    }
+
+    std::array<mesh_verify::GridPoint, 5> check_points;
+    const size_t count = mesh_verify::select_check_points(major_index_range(probe_area), points, check_points, GRID_MAJOR_STEP);
+
+    // The value a tap at a check point should read: z_values holds the probed value plus the bed level correction
+    const auto expected_z = [](const mesh_verify::GridPoint &p) {
+      #if PRINTER_IS_PRUSA_MK3_5() || PRINTER_IS_PRUSA_MINI()
+        return z_values[p.x][p.y] - 0.001f * (x_axis_correction(p.x, p.y) + y_axis_correction(p.x, p.y));
+      #else
+        return z_values[p.x][p.y];
+      #endif
+    };
+
+    // A point without value means the stored mesh is incomplete, do not move at all
+    for (size_t i = 0; i < count; ++i) {
+      if (std::isnan(z_values[check_points[i].x][check_points[i].y])) {
+        return report(MeshVerifyResult::mesh_invalid, "incomplete", 0, 0);
+      }
+    }
+
+    save_ubl_active_state_and_disable();  // No bed level correction so only raw data is obtained
+    pressure_advance::PressureAdvanceDisabler pa_disabler;
+
+    #if ENABLED(NOZZLE_LOAD_CELL)
+      auto loadcell_precision_enabler = Loadcell::HighPrecisionEnabler(loadcell);
+    #endif
+
     #if UBL_TRAVEL_ACCELERATION
-      {
-        auto s = planner.user_settings;
-        s.travel_acceleration = saved_acceleration;
-        planner.apply_settings(s);
+      UblTravelAccelerationOverride travel_acceleration_override;
+    #endif
+
+    PrintStatusMessageGuard status_guard;
+
+    const auto is_reachable = [](const xy_pos_t &pos) {
+      return position_is_reachable_by_probe(pos.x, pos.y);
+    };
+    const auto check_point_pos = [&](size_t i) -> xy_pos_t {
+      return { mesh_index_to_xpos(check_points[i].x), mesh_index_to_ypos(check_points[i].y) };
+    };
+    #if ENABLED(Z_SAFE_HOMING)
+      const xy_pos_t home_point_pos = { Z_SAFE_HOMING_X_POINT, Z_SAFE_HOMING_Y_POINT };
+    #endif
+
+    unsigned total = 0;
+    for (size_t i = 0; i < count; ++i) {
+      total += is_reachable(check_point_pos(i));
+    }
+    #if ENABLED(Z_SAFE_HOMING)
+      total += include_home_point && is_reachable(home_point_pos);
+    #endif
+
+    unsigned tapped = 0;
+    unsigned tapped_mesh_points = 0;
+    float max_diff = 0;
+    bool first = true;
+    bool mismatch = false;
+
+    /// Taps pos and sets diff to |measured - expected|. Unreachable points are skipped
+    /// (tapped stays unchanged). @returns false when the probing failed.
+    const auto tap = [&](const xy_pos_t &pos, float expected, float &diff) -> bool {
+      diff = 0;
+      if (!is_reachable(pos)) {
+        log_info(Marlin, "Mesh verify: point (%.1f, %.1f) unreachable, skipped", (double)pos.x, (double)pos.y);
+        return true;
+      }
+      if (first) {
+        // make initial move manually (has a different speed)
+        xyz_pos_t start_pos = xyz_pos_t(pos);
+        start_pos -= probe_offset;
+        start_pos.z = Z_CLEARANCE_BEFORE_PROBING;
+        #if HAS_HOTEND_OFFSET
+          start_pos -= hotend_currently_applied_offset;
+        #endif
+        do_blocking_move_to(start_pos.x, start_pos.y, start_pos.z);
+        first = false;
+      }
+      status_guard.update<PrintStatusMessage::verifying_mesh>({ .current = (float)(tapped + 1), .target = (float)total });
+      const float measured = probe_at_point(pos, PROBE_PT_RAISE, g29_verbose_level);
+      ++tapped;
+      if (std::isnan(measured)) {
+        return false;
+      }
+      diff = std::abs(measured - expected);
+      log_info(Marlin, "Mesh verify tap (%.1f, %.1f): %.3f expected %.3f diff %.3f", (double)pos.x, (double)pos.y, (double)measured, (double)expected, (double)diff);
+      return true;
+    };
+
+    for (size_t i = 0; i < count && !mismatch; ++i) {
+      if (planner.draining()) break;
+      const unsigned tapped_before = tapped;
+      float diff;
+      if (!tap(check_point_pos(i), expected_z(check_points[i]), diff)) {
+        ubl.g29_probing_failed = true;
+        break;
+      }
+      tapped_mesh_points += tapped - tapped_before;
+      max_diff = std::max(max_diff, diff);
+      mismatch = diff > tolerance;
+    }
+
+    #if ENABLED(Z_SAFE_HOMING)
+      if (include_home_point && !mismatch && !ubl.g29_probing_failed && !planner.draining()) {
+        float diff;
+        if (!tap(home_point_pos, 0.f, diff)) {
+          ubl.g29_probing_failed = true;
+        } else {
+          max_diff = std::max(max_diff, diff);
+          mismatch = diff > tolerance;
+        }
       }
     #endif
 
+    STOW_PROBE();
+
+    #ifdef Z_AFTER_PROBING
+      move_z_after_probing();
+    #endif
+
     restore_ubl_active_state_and_leave();
-  }  
+
+    // Being stopped, the caller does not act on the result
+    if (planner.draining()) return MeshVerifyResult::probing_failed;
+    if (ubl.g29_probing_failed) return report(MeshVerifyResult::probing_failed, "probe_failed", tapped, max_diff);
+    if (mismatch) return report(MeshVerifyResult::mismatch, "mismatch", tapped, max_diff);
+    // The probe reached none of the check points: nothing was verified
+    if (tapped_mesh_points == 0) return report(MeshVerifyResult::mismatch, "unreachable", tapped, max_diff);
+
+    mesh_fresh = true;
+    if (mesh_is_valid()) set_bed_leveling_enabled(true);
+    return report(MeshVerifyResult::verified, "ok", tapped, max_diff);
+  }
 
 
 #endif // HAS_BED_PROBE
@@ -881,11 +1119,25 @@
       #endif
         {
           g29_phase_value = pv;
-          if (!WITHIN(g29_phase_value, 0, 6) && !WITHIN(g29_phase_value, 9, 10)) {
-            SERIAL_ECHOLNPGM("?(P)hase value invalid (0-6).\n");
+          if (!WITHIN(g29_phase_value, 0, 6) && !WITHIN(g29_phase_value, 9, 11)) {
+            SERIAL_ECHOLNPGM("?(P)hase value invalid (0-6, 9-11).\n");
             err_flag = true;
           }
         }
+    }
+
+    {
+      const int verify_points = parser.intval('N', 4);
+      if (!WITHIN(verify_points, 3, 5)) {
+        SERIAL_ECHOLNPGM("?(N)umber of verification points invalid (3-5).\n");
+        err_flag = true;
+      }
+      g29_verify_points = verify_points;
+    }
+    g29_verify_tolerance = parser.floatval('O', 0.05f);
+    if (!(g29_verify_tolerance > 0.f && g29_verify_tolerance <= 1.f)) {
+      SERIAL_ECHOLNPGM("?(O) verification tolerance invalid (0-1 mm).\n");
+      err_flag = true;
     }
 
     xy_seen.x = parser.seenval('X');
