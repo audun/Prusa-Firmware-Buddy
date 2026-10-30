@@ -50,6 +50,45 @@ Add 1–2 min of passive cool-down at the top if the nozzle started above
 170 °C. The MK4S sequence is the same shape minus the idle-temperature drop
 and the heat soak.
 
+### 1.1 Projected budget after the round-2 improvements
+
+Same scenario (CORE One+, PLA 215 / 60, small part, preheated for a few
+minutes). Improvement set assumed, numbers refer to the backlog in section 6:
+
+- **Prep while idle** (18): after Preheat or Ready the user confirms the bed
+  is clear; the printer homes, detects the sheet and verifies the mesh (7)
+  while still idle, with a STOP button. Z alignment runs at the end of every
+  print (19), where the bed is already at the bottom.
+- **Trust the prep** (18): the start G-code issues `G28 Q`; the firmware keeps
+  position trust until motors are disabled, a crash or a power cycle.
+- **Probe hotter** (1): probing at print temperature − 10, with the firmware
+  preheat preset raised to match so Preheat lands there too.
+- **No idle drop when no soak is pending** (4, 21), cleanup and reheat
+  overlapped with the soak when there is one (21).
+- **Bed residency tracked continuously** (23) so `M190` returns at once when
+  the bed has already been at target for 5 s.
+- **Shorter purge** (10).
+
+| Step (start-G-code order)                | Today       | After, prep not run | After, prep run | Changed by |
+|------------------------------------------|-------------|---------------------|-----------------|------------|
+| Preview, scan, prefetch, dialogs         | < 1 s + user| < 1 s + user        | < 1 s + user    | – |
+| `M109 R<probe>` nozzle wait              | 0           | 0                   | 0               | Preheat preset = probe temp (1) |
+| `G28` / `G28 Q`                          | 30–40 s     | 30–40 s             | ~0              | 18 |
+| `G0 Z40`, idle drop, `M190`              | ~7 s        | ~2 s                | ~2 s            | 4, 23 |
+| `G29 G` heat soak                        | 0 (soaked)  | 0                   | 0               | – |
+| `M109 R<probe>` reheat from idle drop    | 5–15 s      | 0                   | 0               | 4 |
+| `G29 P9` cleanup                         | 5–10 s      | 5–10 s              | 0 (done in prep)| 18 |
+| Mesh probing                             | 25–35 s     | ~10 s (4 verify taps)| 0 (done in prep)| 7, 18 |
+| `M109 S215` reheat + 5 s hold            | 20–30 s     | 10–12 s (from 205)  | 10–12 s         | 1 |
+| Purge line + wipe                        | ~10 s       | ~5 s                | ~5 s            | 10 |
+| **Total after tapping Print**            | **2–2.5 min** | **~1–1.5 min**    | **~20–30 s**    | |
+
+Work moved out of the start, not removed: ~15 s of Z alignment at print end,
+and ~40–50 s of homing, sheet detection and mesh verification during the
+preheat, both overlapping with the user removing the part and loading the
+next job. With a nozzle that started above the probing temperature, fan
+assist (17) halves the extra 1–2 min; the prep cannot remove it.
+
 ---
 
 ## 2. Firmware: from the tap to the first start-G-code line
@@ -419,6 +458,13 @@ lives, and the main risk.
 22. **Does the slicer's time estimate include this?** No. PrusaSlicer's time
     estimator only simulates motion; `M109`/`M190`/`G28`/`G29` waits are not
     modelled, and the printer's remaining time comes from the slicer's `M73`.
+23. **Track bed residency continuously.** `wait_for_bed()`
+    (`lib/Marlin/Marlin/src/module/temperature.cpp`) starts its 5 s residency
+    timer only when called, so `M190` costs at least 5 s even when the bed has
+    been at target for minutes. The hotend already tracks residency
+    continuously (`BaseHotend::manage_temp_residency`), which is why `M109`
+    returns at once in the same situation. The TODO at the top of
+    `wait_for_bed` asks for exactly this. Saves 5 s per `M190`.
 
 ---
 
