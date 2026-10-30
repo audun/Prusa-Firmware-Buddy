@@ -53,21 +53,54 @@ and the heat soak.
 ### 1.1 Projected budget after the round-2 improvements
 
 Same scenario (CORE One+, PLA 215 / 60, small part, preheated for a few
-minutes). Improvement set assumed, numbers refer to the backlog in section 6:
+minutes). Improvement set assumed, numbers refer to the backlog in section 6. Each
+item has a firmware half and a slicer half; the firmware half of every
+item is *landed* (on the branch, documented in section 8), the slicer
+half is a start-G-code / filament-profile change that still has to be made
+in the PrusaSlicer bundle (`preset-printer-coreone.yaml`,
+`preset-filament-*.yaml`):
 
 - **Prep while idle** (18): after Preheat or Ready the user confirms the bed
   is clear; the printer homes, detects the sheet and verifies the mesh (7)
-  while still idle, with a STOP button. Z alignment runs at the end of every
-  print (19), where the bed is already at the bottom.
-- **Trust the prep** (18): the start G-code issues `G28 Q`; the firmware keeps
-  position trust until motors are disabled, a crash or a power cycle.
+  while still idle, with a Stop button. Firmware: F5, *landed* (`M1706`,
+  offered after Preheat and from Control → Prepare for Print). Slicer:
+  `G28 Q` instead of `G28` in the start G-code and `G29 P9` dropped; or,
+  with the stock lines, the "Trust Prep in Start G-code" setting, which
+  makes the firmware treat a bare `G28` as `G28 Q` and skip `G29 P9` while
+  prepared.
+- **Z alignment at the end of every print** (19), where the bed is already
+  at the bottom. Firmware: F4, *landed* (`G162 Z R0`, setting "Z Align
+  After Print", default off). Slicer: nothing.
+- **Trust the prep** (18): the start G-code issues `G28 Q`; the firmware
+  keeps position trust until motors are disabled, a crash or a power cycle.
+  Firmware: F5, *landed* (prepared state, steppers kept on). Slicer:
+  `G28 Q`.
+- **Verify the mesh instead of re-probing** (7): Firmware: F2, *landed*
+  (`G29 P11`). Slicer: `G29 P11` in place of the first `G29 P1`.
 - **Probe hotter** (1): probing at print temperature − 10, with the firmware
-  preheat preset raised to match so Preheat lands there too.
+  preheat preset raised to match so Preheat lands there too. Firmware: F6,
+  *landed* (PLA 205, PETG 220 on loadcell printers). Slicer: `HT_MBL10` in
+  the PLA/PETG filament notes. Until the slicer half ships, a Preheat
+  followed by a stock-profile print *regresses* by ~1 min of passive
+  cool-down (section 8.7).
 - **No idle drop when no soak is pending** (4, 21), cleanup and reheat
-  overlapped with the soak when there is one (21).
+  overlapped with the soak when there is one (21). Firmware: F3, *landed*
+  (`G29 G S<temp>` raises the nozzle target near the end of the soak).
+  Slicer: `G29 G S<probe temp>`; dropping the `M104 S100` idle drop when
+  no soak is pending is slicer-only and not done.
 - **Bed residency tracked continuously** (23) so `M190` returns at once when
-  the bed has already been at target for 5 s.
-- **Shorter purge** (10).
+  the bed has already been at target for 5 s. Firmware: F1, *landed*, no
+  slicer change.
+- **Shorter purge** (10). Slicer-only, not done.
+- **Measurement** (section 7): F0, *landed*. Every start-G-code command and
+  every status phase is stamped relative to the Print tap (`pstart_*`
+  metrics / `pstart` log lines) when metrics are enabled.
+
+Slicer-side lines in one place: `G28 Q`, `G29 P11`, `G29 G S<probe temp>`,
+`HT_MBL10` (filament notes), and dropping `G29 P9` for the "prep run"
+column (the last two are replaced by the "Trust Prep in Start G-code"
+setting when the stock lines stay). None of them is in the stock profiles
+yet; the "After" columns of the table assume all of them.
 
 | Step (start-G-code order)                | Today       | After, prep not run | After, prep run | Changed by |
 |------------------------------------------|-------------|---------------------|-----------------|------------|
@@ -487,6 +520,443 @@ lives, and the main risk.
   for PLA) and after a manual temperature change.
 - How long `G29 G` actually waits on the CORE One+ when Print is tapped right
   after the bed reaches 60 °C, versus after a few minutes of preheat.
+
+---
+
+## 8. Implemented (firmware half, round 2)
+
+Commits on `claude/focused-hamilton-onqmge` after `f1a0ccaa`, in the order
+they landed: `9d20ce29` (F0), `a308595d` (F1), `f4a9318a` (F3), `333ff027`
+(F6), `518b85ca` (F4), `903926c3` (F2, with fixups `97849020` and
+`63947d97`), `58f0e6a5` (F5, with fixup `d6a0ae42`). The fixups are to be
+squashed by the maintainer before merging. On-printer steps
+for every item are in `doc/print_startup_local_test_plan.md`; the numbers
+below are *est.* until that plan has been run and the measured values are
+written into the table in section 1.1.
+
+### 8.1 F0 Print startup timeline
+
+**What**
+
+`src/feature/startup_timeline/` records the print startup relative to
+`marlin_server::print_start()`: every top-level G-code dequeued from the
+Marlin queue (hook in `GcodeSuite::process_next_command()`, so the stamp is
+the dequeue time) and every `PrintStatusMessage` phase change, both when a
+guard sets a new type and when a guard is destroyed (the type then shown,
+usually `none`, is reported). Each event is one custom metric point and one
+`MarlinServer` info log line. Metrics: `pstart_gcode` (`t=<ms>i,i=<index>i,
+c="<command, max 20 chars>"`), `pstart_phase` (`t=<ms>i,p=<type>i,n="<short
+name>"`), `pstart_note` (`t=<ms>i,n="<marker>"`). Log lines: `pstart +0ms
+armed`, `pstart +<ms>ms gcode <index> <full command>`, `pstart +<ms>ms phase
+<type> <name>`, `pstart +<ms>ms note <marker>`. The short phase names are
+untranslated (`homing`, `sheet_detect`, `wait_bed`, `wait_hotend`,
+`absorbing_heat`, `nozzle_cleaning`, `probing_bed`, `additional_probing`,
+`verifying_mesh`, `none`, …). Sub-commands run through
+`process_subcommands_now()` are not listed. `buddy::startup_timeline::note()`
+is the marker API: F2 emits `mesh_verify:<result>` from every `G29 P11`
+decision and F5 emits `prep:<step>`; both are recorded only while a print
+start has armed the timeline, so during an idle preparation the `prep:*`
+notes are dropped (the `pre_print_prep` metric carries them instead).
+
+**How to enable**
+
+Nothing to configure beyond metrics: the timeline is armed in
+`print_start()` only when `are_metrics_enabled()` is true (Settings →
+Network → Metrics & Log → Host set, "Enable Metrics" on, or `M334 <host>
+<metrics port> <syslog port>`). It disarms itself after 160 commands or at
+the end of the print, so with metrics off the cost is one branch per command
+and per status change. The log line is emitted only while armed, so it is
+also gated by the metrics switch. The three `pstart_*` metrics are
+`METRIC_ENABLED` by default, no `M331` needed.
+
+**How to test on the printer**
+
+`doc/print_startup_local_test_plan.md` section 1. Key signals: `pstart +0ms
+armed` right after the Print tap; one `pstart … gcode <i> …` line per
+start-G-code line in file order; `pstart … phase <p> homing` →
+`sheet_detect` → `none` around `G28`; in the collector the `pstart_gcode` /
+`pstart_phase` measurements with fields `t`, `i`/`p`, `c`/`n`. With metrics
+disabled: no `pstart` lines at all.
+
+**Expected timeline change**
+
+None. F0 is the instrument; it adds well under a millisecond per command.
+The `t` of each phase change from a stock-profile print after a Preheat is
+the "Today" column of the table in section 1.1 (rows "`G28` / `G28 Q`" =
+`homing` enter → `none` after `sheet_detect`; "`G0 Z40`, idle drop, `M190`"
+= `wait_bed` enter → leave; "`G29 P9` cleanup" = `nozzle_cleaning`; "Mesh
+probing" = `probing_bed` enter → `additional_probing` leave; "`M109 S215`
+reheat" = the second `wait_hotend`).
+
+### 8.2 F1 Continuous bed residency
+
+**What**
+
+`Temperature::wait_for_bed()` used to start its 5 s residency timer only
+when called, so every `M190` cost at least `TEMP_BED_RESIDENCY_TIME` (5 s)
+even on a bed that had sat at target for minutes. The bed residency now
+lives in a `TempResidency` tracker
+(`lib/Marlin/Marlin/src/module/temperature/temp_residency.hpp`) advanced
+from `manage_heater()`: the timer starts when the bed enters
+`TEMP_BED_WINDOW` (1 °C), is cleared when it leaves `TEMP_BED_HYSTERESIS`
+(3 °C) and starts again once the bed re-enters the window; the target counts
+as reached after 5 s inside the band, or at once when the target is 0. A
+target *change* resets it; re-sending the same target (`M140 S60` then
+`M190 R60`) does not. `wait_for_bed()` returns on its first iteration when
+the residency is already satisfied and logs `Bed residency already
+satisfied, not waiting` (`MarlinServer`); otherwise it waits as before (`R`
+waits for cooling, `S` returns while cooling, the `MIN_COOLING_SLOPE` abort
+is unchanged). `is_bed_temperature_reached()` now reports the residency, so
+pause and power-panic resume can wait up to 5 s longer and no longer resume
+with the bed up to 3 °C short. The hotend keeps its own residency code.
+
+**How to enable**
+
+Always on, no setting, no G-code change. Nothing in the slicer profile needs
+to change; `M190 R<bed>` simply returns at once when the bed has been at
+target for > 5 s.
+
+**How to test on the printer**
+
+`doc/print_startup_local_test_plan.md` section 2. Key signals: log line
+`Bed residency already satisfied, not waiting` on the second `M190 R60`; no
+"Waiting for bed" status flash on the screen; on the F0 timeline the
+`wait_bed` phase is absent or < 0.3 s on a preheated bed, versus ~5 s on the
+first `M190` after a target change.
+
+**Expected timeline change**
+
+Section 1.1 row "`G0 Z40`, idle drop, `M190`": ~7 s → ~2 s (the 2 s is the
+`G0 Z40` move) whenever the bed has been within 1 °C of target for > 5 s
+when `M190` runs, i.e. after any Preheat or a previous print. Does not apply
+to a bed that is still heating, or when the bed target changed between
+`M140` and `M190` (different material, bedlet mask change on XL). Saves 5 s
+per `M190`, also for the one in the MK4S profile.
+
+### 8.3 F2 Mesh verification `G29 P11`
+
+**What**
+
+`G29 P11` re-uses the mesh left in RAM by the previous print when a few
+check taps agree with it: it taps the outermost major grid points of the
+probe area (`N` 3–5, default 4: far-left, far-right, near-right, near-left,
+then the centre), optionally the Z homing point (`Z`, expected to read 0),
+compares each tap with `z_values` within `O` mm (default 0.05; `T` is taken
+by the map type) and, when every tap agrees, keeps the mesh, activates it
+if it has no NaN and marks it *fresh*. On a mismatch, an invalid mesh, a
+check point without a value (`incomplete`) or no reachable check point
+(`unreachable`) it invalidates the mesh and probes the area exactly as
+`G29 P1` does (serial: `Mesh verification failed. Probing mesh.`). A fresh
+mesh (probed or verified since the last print ended) makes `P11` tap
+nothing; `M` forces the taps. New status `Verifying mesh` with `n/N`
+progress (`PrintStatusMessage::verifying_mesh`, short name
+`verifying_mesh` on the F0 timeline), log lines `Mesh verify tap (x, y):
+<measured> expected <stored> diff <d>` per tap and `Mesh verify: <ok|fresh|
+invalid|incomplete|mismatch|unreachable|probe_failed>, <n> taps, max diff
+<d> mm, tol <o> mm` (`Marlin` component), metric `mesh_verify r="<result>",
+n=<taps>,d=<max diff>`, and the F0 timeline note `mesh_verify:<result>`
+(`pstart_note`, fixup `63947d97`). Validity tracking: the mesh is trustworthy only
+after a complete non-extending `P1` over an area that covers the requested
+one, with the same `probe_offset.z` (so Live-Z, sheet profile and `M851`
+changes count) and a bed target within 10 °C. Cleared by boot, `G29 P0`,
+`G29 P1`, `G29 I`, `G29 Q`, `M502`, crash recovery, Z alignment (`G162 Z`
+and the F4 end-of-print alignment, log `Mesh invalidated: Z align`) and
+mesh edits (`G29 P5 C`, `G29 P6`, `M420 C`, `M421`); freshness is cleared
+at the end of every print. The end-of-print `print_area.reset_bounding_rect()`
+no longer zeroes the mesh (UBL printers): leveling is only disabled, so
+`G29 A` after a manual `M555` enlargement activates the old mesh. On MK3.5
+and MINI the comparison removes the axis correction that `z_values` holds.
+
+**How to enable**
+
+Slicer start G-code: replace the first `G29 P1` with `G29 P11` (keep
+`G29 P1 X150 Y0 W100 H20 C`, `G29 P3.2`, `G29 P3.13`, `G29 A` as they are;
+the `C` line probes nothing after a successful verify because every point
+already has a value). Defaults need no parameters; `G29 P11 N5 O0.1 Z M`
+for diagnostics. Stock `G29 P1` behaviour is unchanged. The `mesh_verify`
+metric is `METRIC_ENABLED`.
+
+**How to test on the printer**
+
+`doc/print_startup_local_test_plan.md` section 3. Key signals: screen
+"Verifying mesh 1/4 … 4/4"; log `Mesh verify: ok, 4 taps, max diff 0.0xx mm,
+tol 0.050 mm` and `Mesh verify: fresh, 0 taps …` on the immediate repeat;
+metric `mesh_verify r="ok",n=4,d=0.0xx`; in a print also `pstart … note
+mesh_verify:ok`; a `mismatch` (paper under a corner) followed by the full
+`Probing bed` phase. The "Verifying mesh" wait screen
+has no STOP button (same as "Probing bed"); a running verify is stopped
+from the printing screen only.
+
+**Expected timeline change**
+
+Section 1.1 row "Mesh probing": 25–35 s (9 + 3 taps, two 5 mm first
+descents) → ~10 s (4 taps, one descent) for the second and later prints of a
+session with `G29 P11` in the start G-code ("After, prep not run" column);
+→ ~0 s when the mesh is fresh, which only F5 produces at print start
+("After, prep run" column). Does not apply, and the full probe runs, on the
+first print after a power cycle, after a Z alignment (every print when the
+F4 toggle is on, see 8.5), after a Live-Z / sheet / `M851` change, after a
+crash, when the bed target moved by more than 10 °C (PLA → PETG) or when the
+new `M555` area is not covered by the probed one. The purge-area
+`G29 P1 … C` points are not re-verified.
+
+### 8.4 F3 `G29 G S<temp>` early hotend target during the heat soak
+
+**What**
+
+`G29 G` (absorb heat, `Temperature::wait_for_frame_heatup()`) takes an
+optional `S<temp>`. When the soak is predicted to finish within 20 s
+(`early_hotend_lead_s`, prediction from
+`lib/Marlin/Marlin/src/module/temperature/bed_frame_soak.hpp`, the same
+slew model the estimate uses, EJG2 speed-up included), or at once when there
+is nothing to wait for (frame already stable, bed target below the current
+estimate, bed target below the soak threshold) or when the user presses
+Skip, the hotend target of the picked tool (`Hotend::for_tool`) is set to
+`S`, so the `M109 R<temp>` that follows finds the nozzle at or near the
+temperature. An aborted wait (`planner.draining()`), a dry run, or no tool
+picked (toolchanger/INDX, log `Absorbing heat: no tool picked, hotend target
+<t> not set`) leaves the target untouched. Log line: `Absorbing heat:
+setting hotend target <t> early (<already stable|cooling|below soak
+threshold|soak nearly done|skipped by user|soak done>, predicted <n> s
+left)` (`MarlinServer`). `S` outside 0..`HEATER_0_MAXTEMP` is rejected
+(`?(S)oak hotend target implausible.`). Without `S`, or without `G`, the
+behaviour is byte-for-byte the old one; the upstream UBL `S` (mesh storage
+slot) was never compiled in, so the letter is free with `G`.
+
+**How to enable**
+
+Slicer start G-code only: `G29 G` → `G29 G S<probe temp>` with the same
+expression the profile uses for `M109 R<probe temp>` (170 today, print
+temperature − 10 with `HT_MBL10`). No setting, no default change.
+
+**How to test on the printer**
+
+`doc/print_startup_local_test_plan.md` section 4. Key signals: nozzle target
+jumps to `S` while "Absorbing heat" is still on screen, ~20 s before the
+soak ends (log `… (soak nearly done, predicted 19 s left)`); on a warm
+printer `G29 G S205` returns at once with the target set (log `(already
+stable, predicted 0 s left)`); on the F0 timeline the `wait_hotend` phase
+after `absorbing_heat` shrinks from 5–15 s to ≤ 2 s.
+
+**Expected timeline change**
+
+Section 1.1 row "`M109 R<probe>` reheat from idle drop": 5–15 s → 0–2 s,
+but **only when the soak is non-zero** (Print tapped within the first ~2–3
+minutes after the bed reached target on a CORE One+, which is when the
+reheat can overlap the soak). When `G29 G` is skipped outright (bed soaked
+for minutes, the common Preheat case) the target is raised at the moment
+`G29 G` returns and the stock order (`M109 R` immediately after `G29 G`)
+still pays the full reheat from 100 °C; the table's "0" for that row
+belongs to the slicer-side item 4 (no idle drop when no soak is pending),
+not to F3. Nothing changes without `S`. The residency itself is still 5 s
+(`TEMP_RESIDENCY_TIME`), tracked continuously by the hotend as before.
+
+### 8.5 F4 `G162 R` and Z alignment after print
+
+**What**
+
+`G162 Z` takes `R<0|1>`: `R0` skips the return move to Z = 50 after the
+push into the bottom hard stop (`selftest::calib_Z(false)`), `R1` keeps the
+return. Default `R1` on every printer except iX (`R0`, as before); on XL
+`R` is ignored because its alignment never returned to Z = 50. Z is left
+unhomed either way. New config store item `z_align_after_print` (default
+off) with the Settings switch "Z Align After Print" (top-level Settings
+list, after "Stuck Filament Detection"; shown on loadcell printers except
+XL). When on, `align_z_after_print()` in `src/common/marlin_server.cpp`
+runs `calib_Z(false)` in `State::Finishing_ParkHead`, after `lift_head()`
+parked the bed at ≥ `Z_MAX_POS − 50` and `pre_finalize_print()` retracted /
+docked, only from the outer server loop (`idle_running` guard) and only
+while Z is still trusted (XY trust is already dropped there). Skipped for
+serial prints and on the Aborting path; a preview abort after the job
+started also passes through the finishing states and aligns. The screen
+shows the "Calibrating Z" selftest dialog over the printing screen, then
+"Printed". The alignment calls `ubl.invalidate_mesh_validity("Z align")`
+(F2), so the next print has to probe a full mesh; that is why the default is
+off. `fatal_error(ERR_ELECTRO_HOMING_ERROR_Z)` inside `calib_Z` is now
+reachable at the end of a print.
+
+**How to enable**
+
+G-code: `G162 Z R0` (bed stays at the bottom), `G162 Z` / `G162 Z R1`
+(returns to Z = 50). Menu: Settings → "Z Align After Print" → on; survives
+a power cycle. No slicer change. Recommended only together with F5 (the
+preparation then absorbs the full re-probe while idle); with the stock
+profile it costs nothing extra because `G29 P1` re-probes anyway.
+
+**How to test on the printer**
+
+`doc/print_startup_local_test_plan.md` section 5. Key signals: after the end
+G-code and the park, the "Calibrating Z" dialog, the bed pushes into the
+bottom stop and backs off 1 mm, then the "Printed" screen; afterwards Z is
+unhomed (the next Z move homes first) and the log has `Mesh invalidated: Z
+align`; with the toggle off, "Printed" follows the park immediately.
+
+**Expected timeline change**
+
+No row of the start table changes by F4 itself. It adds, at the end of a
+finished print with the toggle on, an est. 5–8 s between the park and
+"Printed" (≤ 50 mm at 19 mm/s, the 5 mm push at 15 mm/s and the 1 mm
+back-off; the spec's earlier "~15 s" assumed the return move, which `R0`
+drops). From the top (`G162 Z` from the Calibrations menu) it stays ~30 s.
+Interaction with F2: with the toggle on, every print's `G29 P11` finds the
+mesh invalid and the "Mesh probing" row is back at 25–35 s unless the F5
+preparation ran the full probe while idle; with the toggle off, F4 changes
+nothing.
+
+### 8.6 F5 Pre-print preparation (`M1706`, prepared state)
+
+**What**
+
+`src/feature/pre_print_prep/` (printers with `HAS_PRE_PRINT_PREP`: CORE One
+and MK4, i.e. loadcell, sheet detection, auto-retract and a known slicer
+cleanup rectangle; not the INDX / L variants). `M1706 [ S0 | C0 | Z | M ]`
+runs, inside one `ClientFSM::PrePrintPrep` dialog titled "Prepare for
+Print": the question "Is the bed clear and the steel sheet in place? …"
+(Yes / No; `S0` skips it), then with a Stop button: a full precise `G28`
+with steel-sheet detection (`G28_no_parser`, as the slicer's bare `G28`),
+the slicer's nozzle-cleanup taps `G29 P9 X208 Y-2.5 W32 H4` (MK4: `G29 P9
+X10 Y-4 W32 H4`; `C0` skips; `cleanup_probe()` does its own retract), then
+Live-Z reset (`probe_offset.z = 0`, as print init does), the print area
+reset to the whole bed and `G29 P11` (`Z`, `M` pass through), `G29 P3.2`,
+`G29 P3.13`, `G29 A`. On success the dialog simply closes and the printer
+is *prepared*: the stepper inactivity timeout is suspended so XY keep
+their position trust, and the F2 mesh stays fresh. The state ends
+(`prepared state ended (<reason>)`) on `trust_lost` (any axis below the
+precise home level: Disable Motors, a crash, `G162 Z`, a full re-home),
+`nozzle_cooled` (idle only: the active nozzle target drops below the
+target it had at completion), `expired` (30 min idle), `print_finished`
+(`finalize_print`) or `manual` (a new preparation starts); every clear
+also calls `ubl.clear_mesh_fresh()`. Nozzle and age rules are suspended
+while printing because the start G-code owns temperatures. A preparation
+started with a cold nozzle (Control menu, no Preheat) records a 0 target,
+so the nozzle rule never fires and the state, with the motors kept on, is
+bounded only by the 30 min, trust loss or a print end. Stop quick-stops
+through `GCodeExceptionHandler { GCEHandlerExtent::any_move }`; the
+handler calls `set_all_unhomed()` and lifts Z by 5 mm (relative park), then
+the "Preparation stopped. The position is no longer known; the next print
+will home and probe as usual." frame waits for Continue. Failures (homing
+or refinement failed, Abort on the "steel sheet not detected" warning,
+Abort in the nozzle-cleaning-failed wizard, probing failed, mesh not
+fresh afterwards) end in "Preparation did not finish. The next print will
+home and probe as usual." with Continue; Ignore in the sheet warning and in
+the cleaning wizard continues (the wizard's Ignore now clears
+`g29_nozzle_cleaning_failed`). `G28_no_parser` now reports failure when the
+user aborts the sheet warning outside a print. Log component
+`PrePrintPrep`: `begin +<ms>ms`, `homed +<ms>ms`, `cleaned +<ms>ms`,
+`mesh_ok +<ms>ms`, `done +<ms>ms` (or `stopped` / `failed`), `prepared
+(nozzle target <N>)`, `prepared state ended (<reason>)`; metric
+`pre_print_prep s="<step>",t=<ms>i` and `s="cleared",r="<reason>"`; F0
+timeline notes `prep:<step>` (only when a print window is armed, so
+normally absent for an idle prep). While prepared and with the "Trust
+Prep in Start G-code" setting on, a bare `G28` (no axis, no `O`/`Q`) is
+treated as `G28 Q` (log `G28: printer prepared, homing only if needed`)
+and `G29 P9` returns before any move when the preparation ran the cleanup
+taps (`PreparedState` keeps a `cleanup_done` bit, false after `M1706 C0`
+and cleared with the state; log `G29 P9: printer prepared, nozzle cleanup
+skipped`). The home-screen
+Preheat now sends `M1700 T-1 P1`; the new `M1700 P` flag runs the
+preparation (with its question) after a filament was chosen, when
+"Prepare After Preheat" is on. Connect reports the FSM as busy; the
+question cannot be answered from Connect yet. Config strings: "Prepare For
+Print After Preheat" (`pre_print_prep_after_preheat`, default on),
+"Prepare For Print Trusts Start Gcode" (`pre_print_prep_trusts_start_gcode`,
+default off).
+
+**How to enable**
+
+Defaults: after every home-screen Preheat the question appears (Settings →
+Hardware → "Prepare After Preheat", on). On demand: Control → "Prepare for
+Print" (below Auto Home; refused with the printer-busy box while printing
+or with G-codes queued), or `M1706` / `M1706 S0 C0 Z M` from the console.
+To make the start G-code benefit: either edit the slicer profile (`G28`
+→ `G28 Q`, drop `G29 P9`) or keep the stock lines and switch Settings →
+Hardware → "Trust Prep in Start G-code" on, which makes the firmware home
+only if needed and skip the cleanup taps while prepared (off by default: a
+gantry bumped while prepared cannot be detected, and the nozzle may ooze
+between the prep and the print). `G29 P1` → `G29 P11` (F2) in either case
+so the fresh mesh is reused.
+
+**How to test on the printer**
+
+`doc/print_startup_local_test_plan.md` section 6. Key signals: the
+"Prepare for Print" question after Preheat; the running frame showing
+Homing → Detecting steel sheet → Nozzle cleaning → Verifying mesh n/4
+(or Probing bed n/49 on the first run after boot / Z align); log
+`PrePrintPrep … done +<ms>ms` and `prepared (nozzle target 205)`; metric
+`pre_print_prep s="done"`; motors still energised after > 2 min idle;
+`prepared state ended (nozzle_cooled|trust_lost|print_finished|expired)`
+when the state is dropped; in a `G28 Q` + `G29 P11` print, no `homing`
+phase and `Mesh verify: fresh, 0 taps`.
+
+**Expected timeline change**
+
+Section 1.1 column "After, prep run": row "`G28` / `G28 Q`" 30–40 s → ~0
+(`G28 Q` in the profile or the trust setting; with neither, the bare `G28`
+re-homes fully, which also ends the prepared state via `trust_lost`, so
+the following `G29 P11` taps 4 points instead of reporting `fresh`); row
+"`G29 P9` cleanup" 5–10 s → 0 (the trust setting skips it when the prep
+ran the cleanup, or the profile drops the line; after `M1706 C0`, or with
+the setting off and the line kept, it still costs its 3+ taps); row "Mesh
+probing" 25–35 s → ~0 (`fresh`, and the purge-area `G29 P1 … C` probes
+nothing). Total after the Print tap est. ~20–30 s. Work moved to idle time:
+est. 40–50 s per preparation (home, sheet, cleanup, 4 taps), ~100 s when
+the whole bed has to be probed (first prep after a power cycle, after
+`G162 Z` / the F4 end-of-print alignment, after a crash, Live-Z/`M851`
+change or a bed target change > 10 °C). Does not apply when the state was
+dropped before the print: part removed after a previous print
+(`print_finished`), Disable Motors, cooldown below the prep-time target,
+30 min idle, or a Stop.
+
+### 8.7 F6 Preheat presets at print temperature − 10
+
+**What**
+
+`src/common/filament_presets.cpp`: the PLA and PETG presets'
+`nozzle_preheat_temperature` is `215 − 10 = 205` and `230 − 10 = 220` when
+`HAS_LOADCELL() && !HAS_INDX()`, 170 otherwise (INDX keeps 170 because its
+tool-offset calibration probes Z at the preheat temperature; MINI and MK3.5
+are unchanged). The preset preheat is what the home-screen Preheat
+(`M1700 T-1`) and a finished Load (`M701`) leave the nozzle at, and it is
+meant to equal the slicer's probing temperature so the first
+`M109 R<probe>` is free; the PrusaSlicer PLA/PETG profiles are moving to
+`HT_MBL10` (first layer temperature − 10). Other readers of the value move
+with it: chamber filtration's "hotend is hot" threshold for PLA/PETG
+(175 → 210/225), the XL lite nozzle cleaner's cleaning temperature in tool
+offset calibration (PLA cleans at 205 and probes at 185, PETG 220/200),
+OpenPrintTag tags without a preheat field. Autoload, unload, `M600`, cold
+pull and first-layer calibration never read it; user and ad-hoc filaments
+keep their stored preheat. Presets are `constexpr`, no config-store
+migration.
+
+**How to enable**
+
+Always on after flashing (loadcell, non-INDX printers). The matching slicer
+half is the filament profile: `filament_notes` containing `HT_MBL10` for
+the PLA/PETG profiles, which makes the start G-code probe at
+`first_layer_temperature − 10` (Prusament PLA 215 → 205 = preset; Generic
+PETG 230 → 220 = preset; Prusament PETG 240 → 230, 10 °C above the preset,
+which costs ~5 s of heating, never a cool-down).
+
+**How to test on the printer**
+
+`doc/print_startup_local_test_plan.md` section 7. Key signals: after Preheat
+→ PLA the Temperature screen / `M105` shows a 205 nozzle target (PETG 220);
+after a Load finishes the target drops 215 → 205 instead of 170; with an
+`HT_MBL10` profile the first `wait_hotend` phase on the F0 timeline is ~0
+and the last one (`M109 S215`) is 10–12 s; with the stock profile the first
+`wait_hotend` is ~1 min (passive 205 → 170).
+
+**Expected timeline change**
+
+Section 1.1 row "`M109 S215` reheat + 5 s hold": 20–30 s (from 170) →
+10–12 s (from 205), *provided* the profile probes at 205 (`HT_MBL10`). Row
+"`M109 R<probe>` nozzle wait": 0 before and 0 after with `HT_MBL10`. With
+the **stock profile** (`M109 R170`) the same row regresses from 0 to ~1 min
+of passive cool-down 205 → 170 after every Preheat or Load; the fix is the
+slicer profile (`HT_MBL10`, or `M109 R… F` fan assist), not firmware. Bed,
+homing and probing rows are unaffected. More ooze at 205 while idle is
+possible; the start G-code's `G1 E-2` retract and `G29 P9` cleanup still
+run before probing, and the tap-rejection count is worth watching.
 
 ---
 
