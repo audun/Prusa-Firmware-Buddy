@@ -74,6 +74,7 @@
 
   #include "mesh_verify_points.hpp"
   #include "metric.h"
+  #include <feature/startup_timeline/startup_timeline.hpp>
 
   #include <math.h>
   #include <algorithm>
@@ -930,6 +931,9 @@
     const auto report = [&](MeshVerifyResult result, const char *name, unsigned tapped, float max_diff) {
       log_info(Marlin, "Mesh verify: %s, %u taps, max diff %.3f mm, tol %.3f mm", name, tapped, (double)max_diff, (double)tolerance);
       metric_record_custom(&metric_mesh_verify, " r=\"%s\",n=%u,d=%.3f", name, tapped, (double)max_diff);
+      char note[32];
+      snprintf(note, sizeof(note), "mesh_verify:%s", name);
+      buddy::startup_timeline::note(note);
       return result;
     };
 
