@@ -15,32 +15,40 @@ the configuration, not measured. Section 7 lists what to measure first.
 
 On a Buddy printer the firmware itself adds very little between the tap and the
 first start-G-code line (well under a second, plus whatever dialogs the user has
-to answer). Almost all of the startup time is the **slicer's start G-code**,
-and on an already-preheated machine the single largest item is a **thermal
-round trip** that the start G-code imposes on purpose: the nozzle is cooled
-from print temperature to a probing temperature (170 °C for PLA), the bed is
-probed with the loadcell nozzle, and the nozzle is then reheated to print
-temperature. Homing, nozzle cleaning, mesh probing and the purge line make up
-the rest.
+to answer). Almost all of the startup time is the **slicer's start G-code**.
 
-Approximate budget, CORE One, PLA (215 / 60), small part, printer already at
-215 / 60 and homed (all *est.*):
+What "preheated" means matters. The home-screen Preheat button and a finished
+filament Load both leave the nozzle at the filament's **preheat temperature**
+(170 °C for PLA), which the firmware table deliberately keeps equal to the
+slicer's probing temperature. From that state the start G-code never cools the
+nozzle; its cost is homing, the bed hold, nozzle cleanup, mesh probing, the
+reheat to print temperature and the purge line. Only when the nozzle sits
+**above** the probing temperature (a manual temperature from the Control menu,
+a custom filament whose preheat temperature equals its print temperature, a
+"keep warm" end G-code) does the start G-code add a passive **thermal round
+trip** of 1–2 minutes.
 
-| Step (in start-G-code order)              | Owner    | Cost on preheated machine        |
-|-------------------------------------------|----------|----------------------------------|
-| Preview, metadata scan, prefetch, dialogs | firmware | < 1 s + user interaction         |
-| `M109 R170` cool nozzle 215 → 170         | slicer   | 1–2 min, passive, no fan         |
-| `G28` full XYZ re-home incl. precise XY   | slicer   | 20–40 s                          |
-| `M104 S100` idle + `M190 R60` + `G29 G`    | slicer   | ~5 s (bed already there)         |
-| `M109 R170` reheat from idle drop         | slicer   | 5–15 s                           |
-| `G29 P9` nozzle cleanup taps              | slicer   | 5–10 s (3 taps min, up to 32)    |
-| `G29 P1` ×2 mesh probing, small part      | slicer   | 20–30 s (9 + 3 points)           |
-| `M109 S215` reheat 170 → 215 + 5 s hold   | slicer   | 20–30 s                          |
-| Purge line + wipe                         | slicer   | ~10 s                            |
-| **Total**                                 |          | **roughly 3–4 min**              |
+Approximate budget, CORE One+, PLA (215 / 60), small part, bed soaked, nozzle
+at 170 via the Preheat button, bed parked low after a previous print (all
+*est.*):
 
-The MK4S sequence is the same shape minus the idle-temperature drop and the
-heat soak, so it lands in the same ballpark.
+| Step (in start-G-code order)              | Owner    | Cost                               |
+|-------------------------------------------|----------|------------------------------------|
+| Preview, metadata scan, prefetch, dialogs | firmware | < 1 s + user interaction           |
+| `M109 R170` nozzle already there          | slicer   | 0 (residency already satisfied)    |
+| `G28` full XYZ re-home                    | slicer   | 30–40 s, a third of it Z travel from the low park position |
+| `G0 Z40`, `M104 S100` idle, `M190 R60`    | slicer   | ~7 s (`M190` always holds 5 s)     |
+| `G29 G` heat soak                         | slicer   | 0 if bed on for > ~3 min, else up to ~1.5 min, skippable |
+| `M109 R170` reheat from idle drop         | slicer   | 5–15 s incl. 5 s residency         |
+| `G29 P9` nozzle cleanup taps              | slicer   | 5–10 s (3 taps min, up to 32)      |
+| `G29 P1` ×2 mesh probing, small part      | slicer   | 25–35 s (9 + 3 points, two 5 mm first descents) |
+| `M109 S215` reheat 170 → 215 + 5 s hold   | slicer   | 20–30 s                            |
+| Purge line + wipe                         | slicer   | ~10 s                              |
+| **Total**                                 |          | **roughly 2–2.5 min**              |
+
+Add 1–2 min of passive cool-down at the top if the nozzle started above
+170 °C. The MK4S sequence is the same shape minus the idle-temperature drop
+and the heat soak.
 
 ---
 
@@ -144,7 +152,7 @@ Chamber-temperature branches omitted (not taken for PLA/PETG).
 | `M555 X Y W H`                         | Sets the print area used by `G29 P1` (`PrintArea`). Area is widened 32 mm in X and 4 mm in −Y so the purge/cleanup spot is included | none |
 | `G90`, `M83`                           | Modes                                                                                                | none |
 | `M140 S<bed>`                          | Bed target, no wait                                                                                  | none |
-| `M109 R<probe temp>`                   | `wait_for_hotend` with `no_wait_for_cooling = false`: **waits for cooling too**, no fan assist. Done when within 1 °C (`TEMP_WINDOW`) for 5 s (`TEMP_RESIDENCY_TIME`, 1 s on INDX). Probe temp is 170 °C for most materials, `first_layer_temperature − 10` if the filament notes contain `HT_MBL10`, −25 for PC/PA, 210 for FLEX, 160 for `MBL160` | **On a preheated 215 °C nozzle: passive cool-down of 45 °C, est. 1–2 min.** The biggest item. |
+| `M109 R<probe temp>`                   | `wait_for_hotend` with `no_wait_for_cooling = false`: **waits for cooling too**, no fan assist unless `F` is given. Done when within 1 °C (`TEMP_WINDOW`) for 5 s (`TEMP_RESIDENCY_TIME`, 1 s on INDX); returns at once if that residency is already satisfied. Probe temp is 170 °C for most materials, `first_layer_temperature − 10` if the filament notes contain `HT_MBL10`, −25 for PC/PA, 210 for FLEX, 160 for `MBL160` | 0 after the Preheat button or a Load (nozzle already at 170). **From a 215 °C nozzle: passive cool-down of 45 °C, est. 1–2 min.** |
 | `M84 E`                                | E motor off                                                                                          | none |
 | `G28`                                  | Bare `G28` ⇒ `force = true`: **all three axes re-homed every print** even if already homed. CORE One: precise CoreXY homing with up to 6 refinement retries (`PRECISE_HOMING_COREXY_RETRIES`), XY at 70 mm/s with 10 mm bumps; Z homed with the loadcell at the safe point (10, 10) at 19 mm/s plus two 2 mm bumps at 1.17 mm/s (`Z_PROBE_SPEED_SLOW`); then **steel-sheet detection** probe at (245, 0) (`HAS_PRINT_SHEET_DETECTION`). Firmware supports `G28 O`/`G28 Q` (home only if not trusted) and `G28 I` (skip precise refinement); the slicer uses neither | est. 20–40 s |
 | `M141 S0`                              | Chamber target                                                                                       | none |
@@ -214,10 +222,13 @@ Relevant knobs that already exist, mostly unused by the stock profiles:
   `M84 X Y E` (motors off), which drops position trust in Marlin, so this is
   only useful together with an end-G-code change or a firmware-side notion of
   "trusted since last print".
-- **UBL mesh slots** – `G29 S<slot>` / `G29 L<slot>` store and load meshes
-  (`settings.store_mesh` / `load_mesh`), `G29 A` activates. The pieces for
-  "reuse last mesh" exist; what is missing is a validity rule (same sheet,
-  same bed temp, no power cycle, no crash) and a slicer/firmware switch.
+- **The previous mesh is still in RAM.** Upstream UBL's `G29 S`/`G29 L` slot
+  storage is **not** compiled into Buddy (the only reference to
+  `settings.load_mesh` is inside `UBL_DEVEL_DEBUGGING` dead code), so there is
+  no persistent mesh. But `z_values` keeps the last print's mesh until the next
+  `G29 P1` invalidates it, so "verify a few points against the previous mesh,
+  re-probe only on change" needs no EEPROM work as long as the printer was not
+  power-cycled.
 - **Nozzle-cleaner-lite precedent** – on units with the accessory the firmware
   probes the touchpoint only 20 °C below the cleaning temperature, which is a
   data point that probing much closer to print temperature is workable when
@@ -231,9 +242,21 @@ Relevant knobs that already exist, mostly unused by the stock profiles:
 ## 5. End of print → next print (the prototyping loop)
 
 - Stock end G-code: `M104 S0`, `M140 S0`, park at (242, 211), `M84 X Y E`.
-  The next print always starts **cold** unless the user preheats manually from
-  the menu; a manually preheated nozzle is then cooled back to 170 °C by the
-  start G-code anyway.
+  The next print starts **cold** unless the user preheats.
+- **Preheat button** (home screen) runs `M1700 T-1`
+  (`src/marlin_stubs/pause/M70X_preheat.cpp`): nozzle to the filament's
+  `nozzle_preheat_temperature`, bed to its `heatbed_temperature`. The firmware
+  presets (`src/common/filament_presets.cpp`) mirror the slicer's probing
+  temperatures: PLA/PETG 170, FLEX 210, PC/PA print temperature − 25. A
+  finished Load ends in the same state (`DoneHasFilament` sets the preheat
+  temperature). Preheating this way therefore costs nothing extra at print
+  start; the `M104 S100` idle drop in the start G-code then throws ~10 s of it
+  away.
+- **End-of-print park** lowers the bed to at least `Z_MAX_POS − 50`
+  (`Z_NOZZLE_PARK_POINT_MIN`, `park_head()` in `marlin_server.cpp`) so the part
+  can be removed. The next `G28` pays that back as ~12 s of Z travel at
+  19 mm/s before the Z taps and sheet detection even start. That, more than
+  XY, is what makes the CORE One `G28` feel slow.
 - Firmware finishing states (`marlin_server.cpp`): `Finishing_WaitIdle` →
   `retract_and_lift()` + `park_head()` (`PARK_HEAD_ON_PRINT_FINISH`) →
   `Finishing_UnloadFilament` → `Finishing_ParkHead` → `Finished` →
@@ -256,9 +279,12 @@ lives, and the main risk.
 ### 6.1 Attack the thermal round trip (largest win on a preheated machine)
 
 1. **Probe closer to print temperature.** Slicer-only first step: `HT_MBL10` in
-   the PLA filament notes (−10 °C instead of −45 °C). Saves most of the
-   cool-down and ~15 s of reheat. Risk: more taps rejected by the analysis,
-   more `G29 P9` retries, blobs. Needs a tap-quality measurement at 195–205 °C.
+   the PLA filament notes (−10 °C instead of −45 °C). Always saves ~15–20 s of
+   the final reheat; also removes most of the cool-down in the cases where
+   the nozzle starts hot. The firmware preheat temperature for the filament
+   should be raised to match so the Preheat button lands on the new probing
+   temperature. Risk: more taps rejected by the analysis, more `G29 P9`
+   retries, blobs. Needs a tap-quality measurement at 195–205 °C.
 2. **Fan-assisted cool-down** via `M109 R… F`. Saves maybe half of the
    cool-down when probing at 170 °C is kept. Risk: none obvious; verify the
    fan restore path and heatbreak fan behaviour during `G29`.
@@ -285,12 +311,15 @@ lives, and the main risk.
 
 ### 6.3 Mesh
 
-7. **Reuse the previous mesh** when the sheet is detected, the bed target is
-   unchanged and nothing invalidated it (power cycle, crash, calibration,
-   sheet profile change). Saves 20–60 s depending on part size. Firmware has
-   the slots; needs the validity rule and a slicer switch (`G29 L0 A` path).
-   Risk: thermal drift of the frame between prints, debris. Could be gated to
-   "same bed temperature and less than N minutes since the last print".
+7. **Reuse the previous mesh after a cheap verification.** The last mesh is
+   still in RAM (section 4). A new `G29` mode would tap a handful of check
+   points (the outermost major points of the print area, or the four sheet
+   corners), compare with the stored values within a tolerance (~0.05 mm),
+   keep the mesh if they agree and fall back to a full `G29 P1` otherwise.
+   Saves ~15–20 s on a small part (12 taps → 4, one 5 mm first descent
+   instead of two) and 40 s or more on a large one. Invalidate on power
+   cycle, crash, Z alignment, sheet change. Risk: debris between check
+   points; frame drift between prints at a different bed temperature.
 8. **Fewer points for small parts**: the print area is already honoured, and a
    ≤ 35 mm part probes 9 + 3 points. The 3-point purge-area probing could be
    dropped when the purge line is shortened or moved (see 10).
@@ -324,9 +353,72 @@ lives, and the main risk.
 15. **Keep-warm after print** as a printer setting (end G-code `M104 S0`
     → idle temp), with the safety timer as the backstop.
 
-### 6.6 Your ideas
+### 6.6 Round 2: CORE One+ focus
 
-(dump here)
+16. **"Why does preheat go to 215 and not 170?"** It does not, when the
+    Preheat button or a Load is used (section 5). If 215 shows up after a
+    preheat on your unit, the likely causes are a custom filament profile
+    whose preheat temperature equals its print temperature, or a temperature
+    set from Control → Temperature. Worth checking on the printer before any
+    code change; the fix would be in the filament profile, not in firmware.
+17. **Fan-assisted cool-down (`M109 R… F`).** Slicer-only, and it only matters
+    when the nozzle is above the probing temperature, so after the Preheat
+    button it changes nothing. Where it applies it should roughly halve the
+    1–2 min. Two things to verify: the fan is held at 100 % until the 5 s
+    residency is met (`wants_to_cool` is only evaluated when the target
+    changes), so the heater has to hold 170 °C against full fan; and the
+    probing temperature's purpose is a dry nozzle, which fan cooling does not
+    change. The stock profile already runs `M106 S70` during the idle drop
+    when the bed is ≤ 60 °C, so the pattern is accepted.
+18. **"Is the printer ready?" pre-print preparation with a STOP.** Today
+    "Ready" exists only for Connect (`MarlinPrinter::set_printer_ready` in
+    `src/connect/marlin_printer.cpp`): it changes the reported `DeviceState`
+    so the queue may start the next job, and moves nothing. Proposal: when the
+    user preheats or sets Ready, ask once whether the bed is clear, then run
+    homing, sheet detection and optionally the Z alignment and the mesh
+    verification in the background, in its own FSM with an abort button
+    (`marlin_server::FSM_Holder` pattern, as `PhasesSelftest::CalibZ` uses).
+    For the start G-code to benefit, bare `G28` must become `G28 Q` (slicer)
+    or the firmware must treat a bare `G28` as `Q` while the pre-print trust
+    is fresh. Position trust is dropped by `disable_X/Y/Z`
+    (`lib/Marlin/Marlin/src/module/stepper/indirection.h`), by a crash and by
+    the toolchanger, so "fresh" has a natural definition. Saves most of the
+    30–40 s `G28` including the Z travel, overlapped with the user's own
+    actions.
+19. **Keep XY homing, add Z alignment around every print.** Z alignment is
+    `selftest::calib_Z()` (`src/marlin_stubs/G162.cpp`, exposed as `G162 Z`):
+    it drives the bed to the bottom hard stop at 19 mm/s, pushes 5 mm past it
+    at 15 mm/s so both motors sync, backs off 1 mm, then returns to Z = 50 and
+    leaves Z unhomed. From the top that is ~30 s; from the end-of-print park
+    position (bed already within 50 mm of the bottom) only the push and the
+    return remain, ~15 s, and the return can be dropped when the bed is left
+    low for part removal anyway. So "align after every print" fits at the end
+    of the finishing sequence or in the end G-code. A "little tap before" is
+    what the Z home at (10, 10) already is; comparing one more tap on the far
+    side of the bed against the previous mesh would catch a Z screw that
+    moved and trigger the alignment only when needed (same mechanism as 7).
+20. **Cursory check instead of full probing.** See idea 7, now sized for the
+    RAM mesh. For a small part the full probing is already only 9 + 3 taps;
+    the perceived "forever" is the sum of P9 cleanup taps, two 5 mm first
+    descents, the reheat residency and the purge, so idea 7 alone buys
+    ~15–20 s on small parts.
+21. **Run cleanup and the nozzle reheat during the heat soak.** On the
+    CORE One+ (`PrinterVariant::plus`, `src/common/printer_variant/coreone.cpp`)
+    `ejg2_installed` is false, so the soak threshold is room temperature and
+    PLA at 60 °C does soak when the frame estimate is not settled (the model
+    in `updateTemperaturesFromRawValues` reaches 60 °C in ~150 s from cold).
+    After a Preheat of a few minutes it is zero. Only the Gen2 edition sets
+    `ejg2`, which skips the soak up to 85 °C and doubles the model's rate.
+    Where the soak is non-zero, the slicer order could be `M109 R170` →
+    `G29 P9` → `M104 S100` → `G29 G` → `M109 R170` → MBL, overlapping the
+    cleanup with the soak; the reheat cannot overlap unless the firmware
+    raises the nozzle target when soak progress passes ~80 %. The idle drop
+    to 100 °C exists to avoid cooking filament during long soaks, so skipping
+    it when the soak is predicted short is also fair game. The soak is already
+    skippable from the screen (`SkippableGCode`).
+22. **Does the slicer's time estimate include this?** No. PrusaSlicer's time
+    estimator only simulates motion; `M109`/`M190`/`G28`/`G29` waits are not
+    modelled, and the printer's remaining time comes from the slicer's `M73`.
 
 ---
 
@@ -344,6 +436,11 @@ lives, and the main risk.
 - **Mesh drift between consecutive prints** at the same bed temperature, to
   size idea 7.
 - How often users actually hit the new-firmware and selftest dialogs.
+- What the nozzle target on your CORE One+ actually is right after Preheat
+  and right after a Load (expected: the filament's preheat temperature, 170
+  for PLA) and after a manual temperature change.
+- How long `G29 G` actually waits on the CORE One+ when Print is tapped right
+  after the bed reaches 60 °C, versus after a few minutes of preheat.
 
 ---
 
@@ -364,5 +461,10 @@ lives, and the main risk.
 | Heat-and-wait                           | `lib/Marlin/Marlin/src/gcode/temperature/M104_M109.cpp`, `M140_M190.cpp`, `lib/Marlin/Marlin/src/module/temperature.cpp` (`wait_for_hotend`, `wait_for_bed`, `wait_for_frame_heatup`) |
 | Residency / window constants            | `include/marlin/Configuration_<PRINTER>.h` (`TEMP_RESIDENCY_TIME`, `TEMP_WINDOW`, probe speeds, mesh grid, homing feedrates) |
 | Nozzle cleaner lite                     | `src/feature/nozzle_cleaner_lite/` |
+| Preheat button, load/unload temps       | `src/marlin_stubs/pause/M70X_preheat.cpp`, `src/marlin_stubs/pause/M701_2.cpp`, `src/common/filament_presets.cpp` |
+| Z alignment                             | `src/marlin_stubs/G162.cpp` (`selftest::calib_Z`) |
+| CORE One editions (EJG2, cleaner lite)  | `src/common/printer_variant/coreone.cpp` |
+| Ready mode for Connect                  | `src/connect/marlin_printer.cpp`, `src/state/printer_state.cpp` |
+| Idle heater safety timer (30 min)       | `src/feature/safety_timer/safety_timer.hpp` |
 | Status phases shown on screen           | `src/feature/print_status_message/print_status_message.hpp` |
 | Slicer start/end G-code                 | PrusaSlicer `resources/presets/prusa-research-fff/PrusaResearch/preset-printer-{coreone,mk4,xl,mini,coreone-indx}.yaml` |
