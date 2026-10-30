@@ -38,6 +38,8 @@ namespace {
             return "probing_bed";
         case PrintStatusMessage::additional_probing:
             return "additional_probing";
+        case PrintStatusMessage::verifying_mesh:
+            return "verifying_mesh";
         case PrintStatusMessage::dwelling:
             return "dwelling";
         case PrintStatusMessage::absorbing_heat:
