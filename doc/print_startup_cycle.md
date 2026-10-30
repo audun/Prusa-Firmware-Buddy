@@ -518,7 +518,7 @@ this branch yet, so every G-code that needs one is gated (section 8.3).
 |------|---------|---------------|------------------------|
 | F1 | 1 | Preheat preset for PLA/PETG raised to print temperature − 10 | Probes PLA and PETG at `first_layer_temperature − 10` (the `HT_MBL10` rule applied by filament type) |
 | F2 | 7, 20 | `G29 P7`: tap a few check points, keep the RAM mesh if they agree, otherwise run the `P1` sequence | `G29 P7` instead of the two `G29 P1` lines |
-| F3 | 18 | Prep while idle; position trust kept until motors off, crash or power cycle | `G28 Q`, end G-code `M84 E` only |
+| F3 | 18 | Prep while idle; position trust kept until motors off, crash or power cycle; `G28 Q` must still run sheet detection | `G28 Q` (only with `QUICKSTART_FW`, see 8.6), end G-code `M84 E` only |
 | F4 | 19 | `G162 Z R<height>`: Z alignment with a configurable return height, `R0` = stay low | `G162 Z R0` at print end |
 | F5 | 4, 21 | `G29 G S<temp>`: raise the hotend target when the soak is nearly done | Idle drop only when a soak is expected; `G29 G S<probe>` where it stays |
 | F6 | 23 | `M190` returns at once when the bed has been resident for 5 s | Nothing; `M190 R` is kept |
@@ -556,10 +556,9 @@ and the `is_nil(idle_temperature)` fallback. The changes:
    nozzle left hotter than the probing temperature is cooled with the part
    fan instead of passively. The firmware restores the fan itself; the
    `M107` makes the state explicit.
-3. **Homing.** `G28 Q` (home only if not trusted). No `P`, so sheet
-   detection still runs. This only saves time once F3 ships or when the end
-   G-code of the previous print left the XY motors enabled, which this
-   profile does (`M84 E`).
+3. **Homing.** `G28 Q` (home only if not trusted) with `QUICKSTART_FW`,
+   plain `G28` otherwise. No `P` flag. The review in 8.6 explains why the
+   stock-firmware path cannot use `G28 Q`.
 4. **Idle drop.** The `M104 S<idle>` drop before `M190`, and its `M106 S70`
    helper, are emitted only when a soak is expected: a minimal chamber
    temperature is set or the first layer bed temperature is above 60 °C.
@@ -576,7 +575,9 @@ and the `is_nil(idle_temperature)` fallback. The changes:
    feedrates, same 3 mm + 3 mm wipe pattern (to X 224 and 221). The purge
    start is unchanged, so the `M555` widening and the stock purge-area probe
    window still cover it.
-7. **End G-code.** `M84 E` instead of `M84 X Y E`; `M104 S<idle>` instead of
+7. **End G-code.** `M84 E` instead of `M84 X Y E` (today the firmware
+   disables XY itself at print finish, so this only matters once F3 keeps
+   them trusted); `M104 S<idle>` instead of
    `M104 S0` with `QUICKSTART_KEEP_WARM` (170 fallback when the filament has
    no idle temperature, the 30 min safety timer is the backstop);
    `G162 Z R0` after park and `G4`, before `M84`, with `QUICKSTART_FW` and
@@ -593,7 +594,7 @@ compatible.
 
 | Flag | Needs | Effect |
 |------|-------|--------|
-| `QUICKSTART_FW` | F2, F4, F5 firmware | `G29 P7`, `G29 G S<probe>`, `M862.6 P"Quick start"` |
+| `QUICKSTART_FW` | F2, F3, F4, F5 firmware | `G28 Q`, `G29 P7`, `G29 G S<probe>`, `M862.6 P"Quick start"` |
 | `QUICKSTART_KEEP_WARM` | nothing | Nozzle left at idle temperature after the print |
 | `QUICKSTART_Z_ALIGN` | `QUICKSTART_FW` | `G162 Z R0` at print end; without `QUICKSTART_FW` the firmware's own end-of-print toggle (F4) is relied on |
 
@@ -626,6 +627,47 @@ stock for both models (`X115 Y96 W32 H24` for the cube, `X50 Y31 W150 H154`
 for the plate), and the start/end diffs against stock contained only the
 changes in 8.2. Nothing has been printed yet; the first real test is the
 tap rejection rate at 220 °C (section 7).
+
+### 8.6 Review against the firmware parsers
+
+Every emitted line was checked against the handlers in this repository.
+Findings that changed or constrain the profile:
+
+- **`G28 Q` on stock firmware skips Z homing and sheet detection.** `Q` is
+  `only_if_needed` (`G28.cpp`), and sheet detection runs only inside the Z
+  homing block. At print finish the firmware disables E and XY
+  (`pre_finalize_print` in `marlin_server.cpp`), which untrusts XY, but Z
+  stays trusted (`DISABLE_INACTIVE_Z` is off), so a `G28 Q` on the next
+  print re-homes XY anyway and skips Z and the sheet check. `M84 E` in the
+  end G-code changes nothing about this. The profile therefore emits
+  `G28 Q` only with `QUICKSTART_FW`; F3 must keep the sheet detection when
+  it starts honouring Z trust across prints.
+- **`G29 P7` on stock firmware is a silent no-op.** The parser rejects the
+  phase with a serial message, nothing aborts the print, and `G29 A`
+  activates whatever is in RAM (all NaN after power-on, which disables the
+  correction, or the previous print's mesh). The only guard is the
+  `M862.6 P"Quick start"` warning, which the user can dismiss or disable via
+  the Firmware hardware check. `QUICKSTART_FW` must not be set on stock
+  firmware; F2 should also make the firmware refuse to print on an invalid
+  phase when a quick-start profile is detected, rather than relying on the
+  profile.
+- **`G162 Z R0` on stock firmware** runs the full Z calibration and brings
+  the bed back to Z 50 under the parked nozzle at (242, 211). Parts taller
+  than about 45 mm in that corner would be touched. This is why the flag
+  requires `QUICKSTART_FW`; F4 has to honour `R0` (skip the return move).
+- **Probing at print temperature − 10** (220 °C for Prusament PLA, 240 °C
+  for PETG) is accepted by every handler but is a behavioural change the
+  stock profile only makes for `HT_MBL10` filaments. The tap rejection rate
+  and oozing during `G29 P9` at these temperatures must be measured before
+  the profile is shared (section 7).
+
+Confirmed fine: bare `F` on `M109 R` is parsed as true and the fan is
+restored by the firmware itself, so the following `M107` is redundant but
+harmless; `G29 G S<temp>` is accepted on stock firmware (unknown letters are
+ignored); `M555` never produces a negative width for objects at the bed
+edge; all other codes (`M302`, `M569`, `M591`, `M221`, `M572`, `M141`,
+`M191`) exist with the arguments used; the purge and wipe moves stay inside
+the CORE One travel limits and the stock cleanup rectangle.
 
 ---
 

@@ -6,12 +6,13 @@ a print or a preheat. They are the stock `Prusa CORE One 0.4 nozzle` and
 `Prusa CORE One HF0.4 nozzle` printer presets with a different start and end
 G-code; machine limits and all print and filament profiles stay stock. The
 start G-code probes PLA and PETG at print temperature minus 10 °C (cooling
-with the fan when the nozzle is hotter), homes with `G28 Q` only when the
-position is not trusted, skips the drop to idle temperature when no heat soak
-is expected (no minimal chamber temperature and a bed at 60 °C or less), and
-purges a half length line. The end G-code disables only the E motor, so XY
-stay trusted for the next `G28 Q`. With no flags set the profile runs on
-current stock firmware. See `../print_startup_cycle.md` for the analysis
+with the fan when the nozzle is hotter), skips the drop to idle temperature
+when no heat soak is expected (no minimal chamber temperature and a bed at
+60 °C or less), and purges a half length line. The end G-code disables only
+the E motor. With no flags set the profile runs on current stock firmware
+and homes with a plain `G28`; `G28 Q` is emitted only with `QUICKSTART_FW`,
+because on today's firmware Z stays trusted across prints and `G28 Q` would
+skip Z homing and the steel sheet detection. See `../print_startup_cycle.md` for the analysis
 behind it.
 
 ## Flags
@@ -21,8 +22,8 @@ are off in the shipped files.
 
 | Flag | Effect | Firmware |
 |------|--------|----------|
-| none | Behaviour described above, stock `G29 P1` probing, `G29 G` + `M109 R` before probing, no Z alignment | Current CORE One firmware (the `M115 U` line is taken from the stock preset, so older firmware gets the usual update suggestion) |
-| `QUICKSTART_FW` | `G29 P7` verifies the stored mesh and re-probes only on mismatch, `G29 G S<probe temp>` reheats the nozzle near the end of the soak, adds `M862.6 P"Quick start"` | Firmware with the quick start features (mesh verify, soak reheat). Not in a release yet. Older firmware rejects `G29 P7` and would print without a valid mesh; the `M862.6` line makes it show the unsupported features warning first |
+| none | Behaviour described above, plain `G28`, stock `G29 P1` probing, `G29 G` + `M109 R` before probing, no Z alignment | Current CORE One firmware (the `M115 U` line is taken from the stock preset, so older firmware gets the usual update suggestion) |
+| `QUICKSTART_FW` | `G28 Q` homes only axes the firmware does not trust, `G29 P7` verifies the stored mesh and re-probes only on mismatch, `G29 G S<probe temp>` reheats the nozzle near the end of the soak, adds `M862.6 P"Quick start"` | Firmware with the quick start features (pre-print prep with trust tracking, mesh verify, soak reheat). Not in a release yet. Never set it on stock firmware: `G29 P7` is rejected there and the print continues with an empty or stale mesh, and `G28 Q` skips Z homing and sheet detection. The `M862.6` line makes stock firmware show the unsupported features warning first, unless the Firmware hardware check is set to Ignore |
 | `QUICKSTART_KEEP_WARM` | End G-code leaves the nozzle at the filament idle temperature (170 °C when unset) instead of turning it off | Any; the firmware safety timer turns the heater off after 30 minutes |
 | `QUICKSTART_Z_ALIGN` | End G-code runs `G162 Z R0` (Z alignment, stay at the bottom) | Only together with `QUICKSTART_FW`, needs `G162 Z R` support. Without `QUICKSTART_FW` it is ignored, because stock firmware would align and return to Z 50, adding about 30 s per print |
 

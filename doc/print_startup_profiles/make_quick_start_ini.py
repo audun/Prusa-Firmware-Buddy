@@ -52,7 +52,7 @@ M107 ; fan off after fan-assisted cooling
 
 M84 E ; turn off E motor
 
-G28 Q ; home only if position not trusted, keep sheet detection
+{if printer_notes=~/.*QUICKSTART_FW.*/}G28 Q ; home only if the pre-print prep left the position trusted{else}G28 ; home all without mesh bed level{endif}
 
 {if chamber_minimal_temperature[initial_tool]!=0}
 ; Min chamber temp section
@@ -157,7 +157,7 @@ G4 ; wait
 G162 Z R0 ; align Z at print end, stay low
 {endif}
 M572 S0 ; reset PA
-M84 E ; disable E motor only, keep XY trusted for G28 Q
+M84 E ; turn off E motor; XY trust is left to the firmware
 ; max_layer_z = [max_layer_z]"""
 
 
