@@ -89,6 +89,11 @@ mini:
 - For reference, `grep -n '#define USE_WATCHDOG' include/marlin/Configuration_*_adv.h`
   at this commit matches the `COREONE`, `COREONEL`, `MINI`, `XL`,
   `XL_DEV_KIT`, `XL_Dwarf` and `iX` files and no `MK4` or `MK3.5` file.
+- The generated build option `DISABLE_WATCHDOG()`
+  (`<build dir>/include/option/disable_watchdog.h`) is 0 in all eight
+  builds, so it is not what separates `mk4` and `mk3.5` from the others
+  (see `05-option-matrix.csv`; it is 1 only in the `mini_big_flash` debug
+  build).
 - Not examined: whether the bootloader starts the watchdog, what happens at
   run time, the sub-board firmwares, debug builds and `--bootloader no`
   builds.
