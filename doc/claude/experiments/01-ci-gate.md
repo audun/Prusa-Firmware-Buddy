@@ -181,7 +181,7 @@ hooks. There is no clang-tidy, cppcheck or other static analysis step.
 | `utils/generate-error-codes-report.py` | exit 0, 0.2 s; reports error codes `XX146`, `XX148`, `XX149` as "not approved" on unmodified `master` |
 | `utils/generate-icon-parity-report.py` | exit 0, 0.1 s |
 | `utils/translations_and_fonts/generate-translations-report.sh` | first exit 127: `xgettext: command not found`; after `apt-get install -y gettext` exit 1 after 2.3 s (details below) |
-| The 13 PR builds with `-Werror` | not run in this stage; stage 3 builds presets without `-Werror` and records any exception |
+| The 13 PR builds with `-Werror` | one of them, `mini-en-cs`, was built with the exact CI flags and passes (stage 3). `coreone_indx`, `coreone`, `coreonel`, `mini-en-pl`, `mk3.5`, `mk4`, `xl`, `ix` were built without `-Werror` and their logs contain no warning. `coreonel_indx`, `slx-anfc`, `anfc-uart`, `anfc` were not built. |
 | `python3 utils/build_tests.py --run -- --output-on-failure` | see stage 2 |
 
 Translations report details: `generate_pot.sh` needs `xgettext`, the report
@@ -231,8 +231,9 @@ utils/translations_and_fonts/generate-translations-report.sh
 utils/generate-icon-parity-report.py
 ```
 
-Steps 1, 2 and 5 were run as shown. Step 3 as a whole loop with `-Werror`
-was not run; stage 3 records which of these presets were built and how long
-one build takes, and stage 2 covers step 4. CI additionally passes
+Steps 1, 2 and 5 were run as shown. Step 3 was not run as a whole loop:
+stage 3 built `mini-en-cs` with exactly these flags and eight more of the
+presets without `-Werror` (3.7 to 6.1 minutes each, no warnings), and
+stage 2 covers step 4. CI additionally passes
 `--no-store-output` and version suffixes and starts each configuration from
 `rm -rf build`; these do not change what is compiled.
