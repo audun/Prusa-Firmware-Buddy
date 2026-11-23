@@ -1,0 +1,535 @@
+################################################################
+# build/mini_release_boot/firmware
+################################################################
+
+$ arm-none-eabi-nm -C build/mini_release_boot/firmware | grep -i -E 'watchdog|iwdg|wdt'
+080733b4 t iwdg_warning_cb()
+08036dea T wdt_iwdg_refresh()
+08062e96 T MI_WATCHDOG::click(IWindowMenu&)
+08027c86 t awdg::F4ADCWatchdog::adjust_range(unsigned short, unsigned short)
+0802a1c8 t awdg::F4ADCWatchdog::change_callback(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>)
+0802d228 t awdg::F4ADCWatchdog::release()
+0802a1b4 t stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::inplace_function(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u> const&)
+0802a1b4 T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::inplace_function(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u> const&) [clone .lto_priv.0]
+08029d74 t stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::~inplace_function()
+080d4790 R stdext::inplace_function_detail::empty_vtable<void, awdg::ADCWatchdog&>
+08050478 T WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetRawCount() const
+08055eb0 t WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetRawIndex(IWindowMenuItem&) const
+08055e80 t WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetItemByRawIndex(int) const
+0802a200 T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::operator()(awdg::ADCWatchdog&) const
+0802a208 T std::array<awdg::F4ADCWatchdog, 3u>::~array() [clone .lto_priv.0]
+0802a208 T std::array<awdg::F4ADCWatchdog, 3u>::~array()
+080d976c R vtable for ScreenMenu<(EFooter)0, MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>
+080e2eb0 r vtable for MI_WATCHDOG
+080e2e48 r vtable for WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>
+080d47a0 R vtable for awdg::F4ADCWatchdog
+08027c94 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*)#1}::_FUN(void*) [clone .lto_priv.0]
+0802da80 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, awdg::ADCWatchdog&)#1}::_FUN(void*, awdg::ADCWatchdog&)
+08027c92 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, void*)#2}::_FUN(void*, void*) [clone .lto_priv.0]
+08027c90 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, void*)#1}::_FUN(void*, void*)
+20004e1c B hiwdg
+05cf0c3d W stm32f4xx_hal_iwdg.c.87a778fa
+00d03d45 W wdt.cpp.4c0fa795
+20007b18 B wdt_iwdg_counter
+20008808 B wdt_iwdg_warning_cb
+200124bc b wdt_wwdg_counter
+
+$ arm-none-eabi-objdump -d -C build/mini_release_boot/firmware | grep -i -E 'bl.*(watchdog_init|HAL_IWDG_Init|wdt_)'
+ 803904c:	f7fd fecd 	bl	8036dea <wdt_iwdg_refresh()>
+ 803d118:	f7f9 fe67 	bl	8036dea <wdt_iwdg_refresh()>
+ 8089a62:	f7ad f9c2 	bl	8036dea <wdt_iwdg_refresh()>
+
+$ arm-none-eabi-objdump -d -C build/mini_release_boot/firmware | awk -f callers.awk | sort | uniq -c
+      1 CALL	Temperature::manage_heater()	bl	wdt_iwdg_refresh()
+      1 CALL	_bsod	bl	wdt_iwdg_refresh()
+      1 CALL	crash_dump::before_dump()	bl	wdt_iwdg_refresh()
+      1 CALL	iwdg_warning_cb()	b.n	iwdg_warning_cb()+0x18
+      1 IWDG_BASE_LITERAL	app_run()
+
+$ arm-none-eabi-objdump -d -C build/mini_release_boot/firmware | awk -f keys.awk | sort | uniq -c
+      1 KEY_0x5555	app_run()
+      1 KEY_0xCCCC	app_run()
+
+$ arm-none-eabi-objdump -d -C --disassemble='wdt_iwdg_refresh()' build/mini_release_boot/firmware | grep -E '^\s+[0-9a-f]+:'
+ 8036dea:	4b05      	ldr	r3, [pc, #20]	@ (8036e00 <wdt_iwdg_refresh()+0x16>)
+ 8036dec:	681b      	ldr	r3, [r3, #0]
+ 8036dee:	b133      	cbz	r3, 8036dfe <wdt_iwdg_refresh()+0x14>
+ 8036df0:	f64a 22aa 	movw	r2, #43690	@ 0xaaaa
+ 8036df4:	601a      	str	r2, [r3, #0]
+ 8036df6:	4b03      	ldr	r3, [pc, #12]	@ (8036e04 <wdt_iwdg_refresh()+0x1a>)
+ 8036df8:	2200      	movs	r2, #0
+ 8036dfa:	f8c3 20b8 	str.w	r2, [r3, #184]	@ 0xb8
+ 8036dfe:	4770      	bx	lr
+ 8036e00:	20004e1c 	.word	0x20004e1c
+ 8036e04:	20007a60 	.word	0x20007a60
+
+################################################################
+# build/mk3.5_release_boot/firmware
+################################################################
+
+$ arm-none-eabi-nm -C build/mk3.5_release_boot/firmware | grep -i -E 'watchdog|iwdg|wdt'
+0807f968 t iwdg_warning_cb()
+08038a12 T wdt_iwdg_refresh()
+0806800e T MI_WATCHDOG::click(IWindowMenu&)
+08027caa t awdg::F4ADCWatchdog::adjust_range(unsigned short, unsigned short)
+0802a4f4 t awdg::F4ADCWatchdog::change_callback(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>)
+0802d8e6 t awdg::F4ADCWatchdog::release()
+0802e0a8 T awdg::get_watchdog_for_adc_handler(ADC_HandleTypeDef*)
+0802a4b4 t stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::inplace_function(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u> const&)
+0802a4b4 T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::inplace_function(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u> const&) [clone .lto_priv.0]
+08029fca T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::~inplace_function()
+0802a4c8 T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::operator=(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>)
+080f2988 R stdext::inplace_function_detail::empty_vtable<void, awdg::ADCWatchdog&>
+0805a43c T WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetRawCount() const
+0805a470 t WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetRawIndex(IWindowMenuItem&) const
+0805a440 t WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetItemByRawIndex(int) const
+0802a512 T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::operator()(awdg::ADCWatchdog&) const
+0802a51a T std::array<awdg::F4ADCWatchdog, 3u>::~array() [clone .lto_priv.0]
+0802a51a T std::array<awdg::F4ADCWatchdog, 3u>::~array()
+080fa110 R vtable for ScreenMenu<(EFooter)0, MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>
+08117dfc r vtable for MI_WATCHDOG
+08117d94 r vtable for WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>
+080f2998 R vtable for awdg::F4ADCWatchdog
+08123654 r stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::inplace_function<mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}, mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}, void>(mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}&&)::vt
+08027cb8 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*)#1}::_FUN(void*) [clone .lto_priv.0]
+0802e0d8 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, awdg::ADCWatchdog&)#1}::_FUN(void*, awdg::ADCWatchdog&)
+08027cb6 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, void*)#2}::_FUN(void*, void*) [clone .lto_priv.0]
+08027cb4 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, void*)#1}::_FUN(void*, void*)
+08083bb0 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable<mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}>(stdext::inplace_function_detail::wrapper<mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}>)::{lambda(void*)#1}::_FUN(void*) [clone .lto_priv.0]
+08083e4e T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable<mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}>(stdext::inplace_function_detail::wrapper<mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}>)::{lambda(void*, awdg::ADCWatchdog&)#1}::_FUN(void*, awdg::ADCWatchdog&) [clone .lto_priv.0]
+08083ba6 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable<mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}>(stdext::inplace_function_detail::wrapper<mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}>)::{lambda(void*, void*)#2}::_FUN(void*, void*) [clone .lto_priv.0]
+08083b9c T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable<mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}>(stdext::inplace_function_detail::wrapper<mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}>)::{lambda(void*, void*)#1}::_FUN(void*, void*) [clone .lto_priv.0]
+080f7778 R hiwdg
+00fcaddd W wdt.cpp.619a626d
+20008cdc B wdt_iwdg_counter
+20008ce8 B wdt_iwdg_warning_cb
+200155e0 b wdt_wwdg_counter
+
+$ arm-none-eabi-objdump -d -C build/mk3.5_release_boot/firmware | grep -i -E 'bl.*(watchdog_init|HAL_IWDG_Init|wdt_)'
+ 80346f2:	f004 f98e 	bl	8038a12 <wdt_iwdg_refresh()>
+ 803f900:	f7f9 f887 	bl	8038a12 <wdt_iwdg_refresh()>
+
+$ arm-none-eabi-objdump -d -C build/mk3.5_release_boot/firmware | awk -f callers.awk | sort | uniq -c
+      1 CALL	crash_dump::before_dump()	bl	wdt_iwdg_refresh()
+      1 CALL	iwdg_warning_cb()	b.n	iwdg_warning_cb()+0x18
+      1 CALL	marlin_server::_server_print_loop()	bl	wdt_iwdg_refresh()
+
+$ arm-none-eabi-objdump -d -C build/mk3.5_release_boot/firmware | awk -f keys.awk | sort | uniq -c
+
+$ arm-none-eabi-objdump -d -C --disassemble='wdt_iwdg_refresh()' build/mk3.5_release_boot/firmware | grep -E '^\s+[0-9a-f]+:'
+ 8038a12:	4770      	bx	lr
+
+################################################################
+# build/mk4_release_boot/firmware
+################################################################
+
+$ arm-none-eabi-nm -C build/mk4_release_boot/firmware | grep -i -E 'watchdog|iwdg|wdt'
+0808302c t iwdg_warning_cb()
+0803b3e0 T wdt_iwdg_refresh()
+0806acce T MI_WATCHDOG::click(IWindowMenu&)
+08027caa t awdg::F4ADCWatchdog::adjust_range(unsigned short, unsigned short)
+0802a598 t awdg::F4ADCWatchdog::change_callback(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>)
+0802c97a t awdg::F4ADCWatchdog::release()
+0802d140 T awdg::get_watchdog_for_adc_handler(ADC_HandleTypeDef*)
+0802a558 t stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::inplace_function(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u> const&)
+0802a558 T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::inplace_function(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u> const&) [clone .lto_priv.0]
+08029ef6 T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::~inplace_function()
+0802a56c T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::operator=(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>)
+081016fc R stdext::inplace_function_detail::empty_vtable<void, awdg::ADCWatchdog&>
+0805d46c T WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetRawCount() const
+0805d4a0 t WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetRawIndex(IWindowMenuItem&) const
+0805d470 t WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetItemByRawIndex(int) const
+080da934 T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::operator()(awdg::ADCWatchdog&) const [clone .constprop.0]
+0802a5b6 T std::array<awdg::F4ADCWatchdog, 3u>::~array() [clone .lto_priv.0]
+0802a5b6 T std::array<awdg::F4ADCWatchdog, 3u>::~array()
+08109624 R vtable for ScreenMenu<(EFooter)0, MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>
+08127248 r vtable for MI_WATCHDOG
+081271e0 r vtable for WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>
+0810170c R vtable for awdg::F4ADCWatchdog
+08133904 r stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::inplace_function<mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}, mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}, void>(mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}&&)::vt
+08027cb8 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*)#1}::_FUN(void*) [clone .lto_priv.0]
+0802d170 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, awdg::ADCWatchdog&)#1}::_FUN(void*, awdg::ADCWatchdog&)
+08027cb6 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, void*)#2}::_FUN(void*, void*) [clone .lto_priv.0]
+08027cb4 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, void*)#1}::_FUN(void*, void*)
+080871dc T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable<mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}>(stdext::inplace_function_detail::wrapper<mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}>)::{lambda(void*)#1}::_FUN(void*) [clone .lto_priv.0]
+0808743a T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable<mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}>(stdext::inplace_function_detail::wrapper<mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}>)::{lambda(void*, awdg::ADCWatchdog&)#1}::_FUN(void*, awdg::ADCWatchdog&) [clone .lto_priv.0]
+080871d2 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable<mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}>(stdext::inplace_function_detail::wrapper<mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}>)::{lambda(void*, void*)#2}::_FUN(void*, void*) [clone .lto_priv.0]
+080871c8 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable<mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}>(stdext::inplace_function_detail::wrapper<mmu_port::power_on()::{lambda(awdg::ADCWatchdog&)#1}>)::{lambda(void*, void*)#1}::_FUN(void*, void*) [clone .lto_priv.0]
+08106b04 R hiwdg
+0103c263 W wdt.cpp.5e7cea1b
+2000b714 B wdt_iwdg_counter
+2000b720 B wdt_iwdg_warning_cb
+200183e8 b wdt_wwdg_counter
+
+$ arm-none-eabi-objdump -d -C build/mk4_release_boot/firmware | grep -i -E 'bl.*(watchdog_init|HAL_IWDG_Init|wdt_)'
+ 8038d1e:	f002 fb5f 	bl	803b3e0 <wdt_iwdg_refresh()>
+ 804169c:	f7f9 fea0 	bl	803b3e0 <wdt_iwdg_refresh()>
+
+$ arm-none-eabi-objdump -d -C build/mk4_release_boot/firmware | awk -f callers.awk | sort | uniq -c
+      1 CALL	crash_dump::before_dump()	bl	wdt_iwdg_refresh()
+      1 CALL	iwdg_warning_cb()	b.n	iwdg_warning_cb()+0x18
+      1 CALL	marlin_server::_server_print_loop() [clone .lto_priv.0]	bl	wdt_iwdg_refresh()
+
+$ arm-none-eabi-objdump -d -C build/mk4_release_boot/firmware | awk -f keys.awk | sort | uniq -c
+
+$ arm-none-eabi-objdump -d -C --disassemble='wdt_iwdg_refresh()' build/mk4_release_boot/firmware | grep -E '^\s+[0-9a-f]+:'
+ 803b3e0:	4770      	bx	lr
+
+################################################################
+# build/xl_release_boot/firmware
+################################################################
+
+$ arm-none-eabi-nm -C build/xl_release_boot/firmware | grep -i -E 'watchdog|iwdg|wdt'
+080901f4 t iwdg_warning_cb()
+0803b8a6 T wdt_iwdg_refresh()
+08071762 T MI_WATCHDOG::click(IWindowMenu&)
+08027c2c T awdg::F4ADCWatchdog::adjust_range(unsigned short, unsigned short)
+08029e2e T awdg::F4ADCWatchdog::change_callback(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>)
+0802c7ca T awdg::F4ADCWatchdog::release()
+0802e034 T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::inplace_function(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u> const&)
+0802e034 T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::inplace_function(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u> const&) [clone .lto_priv.0]
+08029dfa T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::~inplace_function()
+08114b34 R stdext::inplace_function_detail::empty_vtable<void, awdg::ADCWatchdog&>
+08063930 t WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetRawCount() const
+08063964 t WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetRawIndex(IWindowMenuItem&) const
+08063934 t WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetItemByRawIndex(int) const
+080ea8d8 T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::operator()(awdg::ADCWatchdog&) const [clone .constprop.0]
+08030528 T std::array<awdg::F4ADCWatchdog, 3u>::~array() [clone .lto_priv.0]
+08030528 T std::array<awdg::F4ADCWatchdog, 3u>::~array()
+0811ca08 R vtable for ScreenMenu<(EFooter)0, MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>
+0813a8c4 r vtable for MI_WATCHDOG
+0813a85c r vtable for WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>
+08114d94 R vtable for awdg::F4ADCWatchdog
+0802de00 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*)#1}::_FUN(void*) [clone .lto_priv.0]
+0802fe88 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, awdg::ADCWatchdog&)#1}::_FUN(void*, awdg::ADCWatchdog&)
+0802ddfe T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, void*)#2}::_FUN(void*, void*) [clone .lto_priv.0]
+0802ddfc T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, void*)#1}::_FUN(void*, void*)
+2000717c B hiwdg
+083beb61 W stm32f4xx_hal_iwdg.c.0dbf0549
+0119bc18 W wdt.cpp.336b540f
+2000d4f8 B wdt_iwdg_counter
+2000d9a4 B wdt_iwdg_warning_cb
+2001b2ac b wdt_wwdg_counter
+
+$ arm-none-eabi-objdump -d -C build/xl_release_boot/firmware | grep -i -E 'bl.*(watchdog_init|HAL_IWDG_Init|wdt_)'
+ 80389d4:	f002 ff67 	bl	803b8a6 <wdt_iwdg_refresh()>
+ 803c30c:	f7ff facb 	bl	803b8a6 <wdt_iwdg_refresh()>
+ 8041658:	f7fa f925 	bl	803b8a6 <wdt_iwdg_refresh()>
+ 80b079a:	f78b f884 	bl	803b8a6 <wdt_iwdg_refresh()>
+ 80b085c:	f78b f823 	bl	803b8a6 <wdt_iwdg_refresh()>
+
+$ arm-none-eabi-objdump -d -C build/xl_release_boot/firmware | awk -f callers.awk | sort | uniq -c
+      2 CALL	Temperature::manage_heater()	bl	wdt_iwdg_refresh()
+      1 CALL	_bsod	bl	wdt_iwdg_refresh()
+      1 CALL	crash_dump::before_dump()	bl	wdt_iwdg_refresh()
+      1 CALL	iwdg_warning_cb()	b.n	iwdg_warning_cb()+0x18
+      1 CALL	marlin_server::_server_print_loop() [clone .lto_priv.0]	bl	wdt_iwdg_refresh()
+      1 IWDG_BASE_LITERAL	app_run()
+
+$ arm-none-eabi-objdump -d -C build/xl_release_boot/firmware | awk -f keys.awk | sort | uniq -c
+      1 KEY_0x5555	app_run()
+      1 KEY_0xCCCC	app_run()
+
+$ arm-none-eabi-objdump -d -C --disassemble='wdt_iwdg_refresh()' build/xl_release_boot/firmware | grep -E '^\s+[0-9a-f]+:'
+ 803b8a6:	4b05      	ldr	r3, [pc, #20]	@ (803b8bc <wdt_iwdg_refresh()+0x16>)
+ 803b8a8:	681b      	ldr	r3, [r3, #0]
+ 803b8aa:	b12b      	cbz	r3, 803b8b8 <wdt_iwdg_refresh()+0x12>
+ 803b8ac:	f64a 22aa 	movw	r2, #43690	@ 0xaaaa
+ 803b8b0:	601a      	str	r2, [r3, #0]
+ 803b8b2:	4b03      	ldr	r3, [pc, #12]	@ (803b8c0 <wdt_iwdg_refresh()+0x1a>)
+ 803b8b4:	2200      	movs	r2, #0
+ 803b8b6:	629a      	str	r2, [r3, #40]	@ 0x28
+ 803b8b8:	4770      	bx	lr
+ 803b8ba:	bf00      	nop
+ 803b8bc:	2000717c 	.word	0x2000717c
+ 803b8c0:	2000d4d0 	.word	0x2000d4d0
+
+################################################################
+# build/ix_release_boot/firmware
+################################################################
+
+$ arm-none-eabi-nm -C build/ix_release_boot/firmware | grep -i -E 'watchdog|iwdg|wdt'
+0807a794 T iwdg_warning_cb()
+08036500 T wdt_iwdg_refresh()
+08062dbe T MI_WATCHDOG::click(IWindowMenu&)
+08027260 t awdg::F4ADCWatchdog::adjust_range(unsigned short, unsigned short)
+08029cbc t awdg::F4ADCWatchdog::change_callback(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>)
+0802bd22 t awdg::F4ADCWatchdog::release()
+08029ca8 t stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::inplace_function(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u> const&)
+08029ca8 T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::inplace_function(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u> const&) [clone .lto_priv.0]
+080297bc t stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::~inplace_function()
+080f21dc R stdext::inplace_function_detail::empty_vtable<void, awdg::ADCWatchdog&>
+0805afa8 T WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetRawCount() const
+0805afdc t WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetRawIndex(IWindowMenuItem&) const
+0805afac t WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetItemByRawIndex(int) const
+080ce118 T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::operator()(awdg::ADCWatchdog&) const [clone .constprop.0]
+08029cf4 T std::array<awdg::F4ADCWatchdog, 3u>::~array() [clone .lto_priv.0]
+08029cf4 T std::array<awdg::F4ADCWatchdog, 3u>::~array()
+080f84b8 R vtable for ScreenMenu<(EFooter)0, MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>
+08116284 r vtable for MI_WATCHDOG
+0811621c r vtable for WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>
+080f21ec R vtable for awdg::F4ADCWatchdog
+0802726e T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*)#1}::_FUN(void*) [clone .lto_priv.0]
+0802c2bc T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, awdg::ADCWatchdog&)#1}::_FUN(void*, awdg::ADCWatchdog&)
+0802726c T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, void*)#2}::_FUN(void*, void*) [clone .lto_priv.0]
+0802726a T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, void*)#1}::_FUN(void*, void*)
+20004f5c B hiwdg
+06bd0e64 W stm32f4xx_hal_iwdg.c.fe8a6756
+00e667ea W wdt.cpp.bb545150
+2000972c B wdt_iwdg_counter
+2000ab90 B wdt_iwdg_warning_cb
+2001a260 b wdt_wwdg_counter
+
+$ arm-none-eabi-objdump -d -C build/ix_release_boot/firmware | grep -i -E 'bl.*(watchdog_init|HAL_IWDG_Init|wdt_)'
+ 8033c16:	f002 fc73 	bl	8036500 <wdt_iwdg_refresh()>
+ 80376d2:	f7fe ff15 	bl	8036500 <wdt_iwdg_refresh()>
+ 803bcd2:	f7fa fc15 	bl	8036500 <wdt_iwdg_refresh()>
+ 80945dc:	f7a1 ff90 	bl	8036500 <wdt_iwdg_refresh()>
+
+$ arm-none-eabi-objdump -d -C build/ix_release_boot/firmware | awk -f callers.awk | sort | uniq -c
+      1 CALL	Temperature::manage_heater()	bl	wdt_iwdg_refresh()
+      1 CALL	_bsod	bl	wdt_iwdg_refresh()
+      1 CALL	crash_dump::before_dump()	bl	wdt_iwdg_refresh()
+      1 CALL	iwdg_warning_cb()	b.n	iwdg_warning_cb()+0x18
+      1 CALL	marlin_server::cycle() [clone .part.0]	bl	wdt_iwdg_refresh()
+      1 IWDG_BASE_LITERAL	app_run()
+
+$ arm-none-eabi-objdump -d -C build/ix_release_boot/firmware | awk -f keys.awk | sort | uniq -c
+      1 KEY_0x5555	app_run()
+      1 KEY_0xCCCC	app_run()
+
+$ arm-none-eabi-objdump -d -C --disassemble='wdt_iwdg_refresh()' build/ix_release_boot/firmware | grep -E '^\s+[0-9a-f]+:'
+ 8036500:	4b05      	ldr	r3, [pc, #20]	@ (8036518 <wdt_iwdg_refresh()+0x18>)
+ 8036502:	681b      	ldr	r3, [r3, #0]
+ 8036504:	b133      	cbz	r3, 8036514 <wdt_iwdg_refresh()+0x14>
+ 8036506:	f64a 22aa 	movw	r2, #43690	@ 0xaaaa
+ 803650a:	601a      	str	r2, [r3, #0]
+ 803650c:	4b03      	ldr	r3, [pc, #12]	@ (803651c <wdt_iwdg_refresh()+0x1c>)
+ 803650e:	2200      	movs	r2, #0
+ 8036510:	f8c3 20c8 	str.w	r2, [r3, #200]	@ 0xc8
+ 8036514:	4770      	bx	lr
+ 8036516:	bf00      	nop
+ 8036518:	20004f5c 	.word	0x20004f5c
+ 803651c:	20009664 	.word	0x20009664
+
+################################################################
+# build/coreone_release_boot/firmware
+################################################################
+
+$ arm-none-eabi-nm -C build/coreone_release_boot/firmware | grep -i -E 'watchdog|iwdg|wdt'
+0803c35c T wdt_iwdg_init()
+0808e9f8 t iwdg_warning_cb()
+0803b4de T wdt_iwdg_refresh()
+08070d72 T MI_WATCHDOG::click(IWindowMenu&)
+08027caa T awdg::F4ADCWatchdog::adjust_range(unsigned short, unsigned short)
+08029f22 T awdg::F4ADCWatchdog::change_callback(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>)
+0802c162 T awdg::F4ADCWatchdog::release()
+0802e0fc T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::inplace_function(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u> const&)
+0802e0fc T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::inplace_function(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u> const&) [clone .lto_priv.0]
+08029eee T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::~inplace_function()
+081146c4 R stdext::inplace_function_detail::empty_vtable<void, awdg::ADCWatchdog&>
+08062f24 T WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetRawCount() const
+08062f58 t WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetRawIndex(IWindowMenuItem&) const
+08062f28 t WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetItemByRawIndex(int) const
+080e8ce8 T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::operator()(awdg::ADCWatchdog&) const [clone .constprop.0]
+08030f1c T std::array<awdg::F4ADCWatchdog, 3u>::~array() [clone .lto_priv.0]
+08030f1c T std::array<awdg::F4ADCWatchdog, 3u>::~array()
+0811dba4 R vtable for ScreenMenu<(EFooter)0, MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>
+0813b7b4 r vtable for MI_WATCHDOG
+0813b74c r vtable for WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>
+08114bf8 R vtable for awdg::F4ADCWatchdog
+0802dcc8 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*)#1}::_FUN(void*) [clone .lto_priv.0]
+08030900 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, awdg::ADCWatchdog&)#1}::_FUN(void*, awdg::ADCWatchdog&)
+0802dcc6 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, void*)#2}::_FUN(void*, void*) [clone .lto_priv.0]
+0802dcc4 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, void*)#1}::_FUN(void*, void*)
+2000ae08 B hiwdg
+08bc75f3 W stm32f4xx_hal_iwdg.c.ce3adb4d
+0115d6a0 W wdt.cpp.fab1fab2
+2000ae14 B wdt_iwdg_counter
+2000b950 B wdt_iwdg_warning_cb
+200193ec b wdt_wwdg_counter
+
+$ arm-none-eabi-objdump -d -C build/coreone_release_boot/firmware | grep -i -E 'bl.*(watchdog_init|HAL_IWDG_Init|wdt_)'
+ 802d41c:	f00e f85f 	bl	803b4de <wdt_iwdg_refresh()>
+ 802d44a:	f00e ff87 	bl	803c35c <wdt_iwdg_init()>
+ 802d47a:	f00e f830 	bl	803b4de <wdt_iwdg_refresh()>
+ 802d4a4:	f00e f81b 	bl	803b4de <wdt_iwdg_refresh()>
+ 802d6d4:	f00e fe42 	bl	803c35c <wdt_iwdg_init()>
+ 8036720:	f004 fedd 	bl	803b4de <wdt_iwdg_refresh()>
+ 803c05c:	f7ff fa3f 	bl	803b4de <wdt_iwdg_refresh()>
+ 803c39c:	d9f3      	bls.n	803c386 <wdt_iwdg_init()+0x2a>
+ 8041920:	f7f9 fddd 	bl	803b4de <wdt_iwdg_refresh()>
+ 80ac656:	f78e ff42 	bl	803b4de <wdt_iwdg_refresh()>
+
+$ arm-none-eabi-objdump -d -C build/coreone_release_boot/firmware | awk -f callers.awk | sort | uniq -c
+      1 CALL	Temperature::updateTemperaturesFromRawValues()	bl	wdt_iwdg_refresh()
+      1 CALL	_bsod	bl	wdt_iwdg_refresh()
+      2 CALL	app_run()	bl	wdt_iwdg_init()
+      3 CALL	app_run()	bl	wdt_iwdg_refresh()
+      1 CALL	crash_dump::before_dump()	bl	wdt_iwdg_refresh()
+      1 CALL	iwdg_warning_cb()	b.n	iwdg_warning_cb()+0x18
+      1 CALL	marlin_server::_server_print_loop()	bl	wdt_iwdg_refresh()
+      1 CALL	wdt_iwdg_init()	beq.n	wdt_iwdg_init()+0x2a
+      1 CALL	wdt_iwdg_init()	bls.n	wdt_iwdg_init()+0x2a
+      1 CALL	wdt_iwdg_init()	bne.n	wdt_iwdg_init()+0x38
+      1 IWDG_BASE_LITERAL	wdt_iwdg_init()
+
+$ arm-none-eabi-objdump -d -C build/coreone_release_boot/firmware | awk -f keys.awk | sort | uniq -c
+      1 KEY_0x5555	wdt_iwdg_init()
+      1 KEY_0xCCCC	wdt_iwdg_init()
+
+$ arm-none-eabi-objdump -d -C --disassemble='wdt_iwdg_refresh()' build/coreone_release_boot/firmware | grep -E '^\s+[0-9a-f]+:'
+ 803b4de:	4b05      	ldr	r3, [pc, #20]	@ (803b4f4 <wdt_iwdg_refresh()+0x16>)
+ 803b4e0:	f8d3 2080 	ldr.w	r2, [r3, #128]	@ 0x80
+ 803b4e4:	b12a      	cbz	r2, 803b4f2 <wdt_iwdg_refresh()+0x14>
+ 803b4e6:	f64a 21aa 	movw	r1, #43690	@ 0xaaaa
+ 803b4ea:	6011      	str	r1, [r2, #0]
+ 803b4ec:	2200      	movs	r2, #0
+ 803b4ee:	f8c3 208c 	str.w	r2, [r3, #140]	@ 0x8c
+ 803b4f2:	4770      	bx	lr
+ 803b4f4:	2000ad88 	.word	0x2000ad88
+
+################################################################
+# build/coreonel_release_boot/firmware
+################################################################
+
+$ arm-none-eabi-nm -C build/coreonel_release_boot/firmware | grep -i -E 'watchdog|iwdg|wdt'
+0803c260 T wdt_iwdg_init()
+0808ec0c T iwdg_warning_cb()
+0803b3f2 T wdt_iwdg_refresh()
+08071112 T MI_WATCHDOG::click(IWindowMenu&)
+08027caa T awdg::F4ADCWatchdog::adjust_range(unsigned short, unsigned short)
+08029f22 T awdg::F4ADCWatchdog::change_callback(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>)
+0802c162 T awdg::F4ADCWatchdog::release()
+0802e0c8 T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::inplace_function(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u> const&)
+0802e0c8 T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::inplace_function(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u> const&) [clone .lto_priv.0]
+08029eee T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::~inplace_function()
+08114c64 R stdext::inplace_function_detail::empty_vtable<void, awdg::ADCWatchdog&>
+08062ffc T WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetRawCount() const
+08063030 t WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetRawIndex(IWindowMenuItem&) const
+08063000 t WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetItemByRawIndex(int) const
+080e8d24 T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::operator()(awdg::ADCWatchdog&) const [clone .constprop.0]
+08030ecc T std::array<awdg::F4ADCWatchdog, 3u>::~array() [clone .lto_priv.0]
+08030ecc T std::array<awdg::F4ADCWatchdog, 3u>::~array()
+0811e554 R vtable for ScreenMenu<(EFooter)0, MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>
+0813c164 r vtable for MI_WATCHDOG
+0813c0fc r vtable for WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>
+08115198 R vtable for awdg::F4ADCWatchdog
+0802dc94 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*)#1}::_FUN(void*) [clone .lto_priv.0]
+080308b0 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, awdg::ADCWatchdog&)#1}::_FUN(void*, awdg::ADCWatchdog&)
+0802dc92 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, void*)#2}::_FUN(void*, void*) [clone .lto_priv.0]
+0802dc90 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, void*)#1}::_FUN(void*, void*)
+2000ae64 B hiwdg
+08d4d80a W stm32f4xx_hal_iwdg.c.9ac34d37
+01171240 W wdt.cpp.9b2f5fcb
+2000ae70 B wdt_iwdg_counter
+2000be40 B wdt_iwdg_warning_cb
+200198dc b wdt_wwdg_counter
+
+$ arm-none-eabi-objdump -d -C build/coreonel_release_boot/firmware | grep -i -E 'bl.*(watchdog_init|HAL_IWDG_Init|wdt_)'
+ 802d40c:	f00d fff1 	bl	803b3f2 <wdt_iwdg_refresh()>
+ 802d43a:	f00e ff11 	bl	803c260 <wdt_iwdg_init()>
+ 802d46a:	f00d ffc2 	bl	803b3f2 <wdt_iwdg_refresh()>
+ 802d494:	f00d ffad 	bl	803b3f2 <wdt_iwdg_refresh()>
+ 802d6c4:	f00e fdcc 	bl	803c260 <wdt_iwdg_init()>
+ 803674c:	f004 fe51 	bl	803b3f2 <wdt_iwdg_refresh()>
+ 803bf34:	f7ff fa5d 	bl	803b3f2 <wdt_iwdg_refresh()>
+ 803c2a0:	d9f3      	bls.n	803c28a <wdt_iwdg_init()+0x2a>
+ 80416d8:	f7f9 fe8b 	bl	803b3f2 <wdt_iwdg_refresh()>
+ 80acacc:	f78e fc91 	bl	803b3f2 <wdt_iwdg_refresh()>
+
+$ arm-none-eabi-objdump -d -C build/coreonel_release_boot/firmware | awk -f callers.awk | sort | uniq -c
+      1 CALL	Temperature::updateTemperaturesFromRawValues()	bl	wdt_iwdg_refresh()
+      1 CALL	_bsod	bl	wdt_iwdg_refresh()
+      2 CALL	app_run()	bl	wdt_iwdg_init()
+      3 CALL	app_run()	bl	wdt_iwdg_refresh()
+      1 CALL	crash_dump::before_dump()	bl	wdt_iwdg_refresh()
+      1 CALL	iwdg_warning_cb()	b.n	iwdg_warning_cb()+0x18
+      1 CALL	marlin_server::_server_print_loop()	bl	wdt_iwdg_refresh()
+      1 CALL	wdt_iwdg_init()	beq.n	wdt_iwdg_init()+0x2a
+      1 CALL	wdt_iwdg_init()	bls.n	wdt_iwdg_init()+0x2a
+      1 CALL	wdt_iwdg_init()	bne.n	wdt_iwdg_init()+0x38
+      1 IWDG_BASE_LITERAL	wdt_iwdg_init()
+
+$ arm-none-eabi-objdump -d -C build/coreonel_release_boot/firmware | awk -f keys.awk | sort | uniq -c
+      1 KEY_0x5555	wdt_iwdg_init()
+      1 KEY_0xCCCC	wdt_iwdg_init()
+
+$ arm-none-eabi-objdump -d -C --disassemble='wdt_iwdg_refresh()' build/coreonel_release_boot/firmware | grep -E '^\s+[0-9a-f]+:'
+ 803b3f2:	4b05      	ldr	r3, [pc, #20]	@ (803b408 <wdt_iwdg_refresh()+0x16>)
+ 803b3f4:	f8d3 2084 	ldr.w	r2, [r3, #132]	@ 0x84
+ 803b3f8:	b12a      	cbz	r2, 803b406 <wdt_iwdg_refresh()+0x14>
+ 803b3fa:	f64a 21aa 	movw	r1, #43690	@ 0xaaaa
+ 803b3fe:	6011      	str	r1, [r2, #0]
+ 803b400:	2200      	movs	r2, #0
+ 803b402:	f8c3 2090 	str.w	r2, [r3, #144]	@ 0x90
+ 803b406:	4770      	bx	lr
+ 803b408:	2000ade0 	.word	0x2000ade0
+
+################################################################
+# build/coreone_indx_release_boot/firmware
+################################################################
+
+$ arm-none-eabi-nm -C build/coreone_indx_release_boot/firmware | grep -i -E 'watchdog|iwdg|wdt'
+080936cc t iwdg_warning_cb()
+0803bae2 T wdt_iwdg_refresh()
+0807155e T MI_WATCHDOG::click(IWindowMenu&)
+08027d66 t awdg::F4ADCWatchdog::adjust_range(unsigned short, unsigned short)
+0802a3d0 t awdg::F4ADCWatchdog::change_callback(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>)
+0802d4be t awdg::F4ADCWatchdog::release()
+0802a3bc t stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::inplace_function(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u> const&)
+0802a3bc T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::inplace_function(stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u> const&) [clone .lto_priv.0]
+0802a01a t stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::~inplace_function()
+08115e78 R stdext::inplace_function_detail::empty_vtable<void, awdg::ADCWatchdog&>
+08069b50 T WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetRawCount() const
+08069b84 T WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetRawIndex(IWindowMenuItem&) const
+08069b54 T WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>::GetItemByRawIndex(int) const
+080ec508 T stdext::inplace_function<void (awdg::ADCWatchdog&), 8u, 8u>::operator()(awdg::ADCWatchdog&) const [clone .constprop.0]
+0802a408 T std::array<awdg::F4ADCWatchdog, 3u>::~array() [clone .lto_priv.0]
+0802a408 T std::array<awdg::F4ADCWatchdog, 3u>::~array()
+08120ecc R vtable for ScreenMenu<(EFooter)0, MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>
+0811ecc8 R vtable for MI_WATCHDOG
+0811ec68 R vtable for WinMenuContainer<MI_RETURN, MI_TRIGGER_BSOD, MI_STACK_OVERFLOW, MI_DIV0, MI_WATCHDOG, MI_PREHEAT_ERROR, MI_TRIGGER_REDSCREEN>
+08115e88 R vtable for awdg::F4ADCWatchdog
+08027d74 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*)#1}::_FUN(void*) [clone .lto_priv.0]
+0802e020 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, awdg::ADCWatchdog&)#1}::_FUN(void*, awdg::ADCWatchdog&)
+08027d72 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, void*)#2}::_FUN(void*, void*) [clone .lto_priv.0]
+08027d70 T stdext::inplace_function_detail::vtable<void, awdg::ADCWatchdog&>::vtable()::{lambda(void*, void*)#1}::_FUN(void*, void*)
+2000559c B hiwdg
+086fca25 W stm32f4xx_hal_iwdg.c.3836c6ff
+01120d4a W wdt.cpp.1bcbeaef
+2000bf24 B wdt_iwdg_counter
+2000c0b8 B wdt_iwdg_warning_cb
+2001a20c b wdt_wwdg_counter
+
+$ arm-none-eabi-objdump -d -C build/coreone_indx_release_boot/firmware | grep -i -E 'bl.*(watchdog_init|HAL_IWDG_Init|wdt_)'
+ 80388cc:	f003 f909 	bl	803bae2 <wdt_iwdg_refresh()>
+ 803d44e:	f7fe fb48 	bl	803bae2 <wdt_iwdg_refresh()>
+ 803da2a:	f7fe f85a 	bl	803bae2 <wdt_iwdg_refresh()>
+ 80ac1ce:	f78f fc88 	bl	803bae2 <wdt_iwdg_refresh()>
+
+$ arm-none-eabi-objdump -d -C build/coreone_indx_release_boot/firmware | awk -f callers.awk | sort | uniq -c
+      1 CALL	Temperature::updateTemperaturesFromRawValues()	bl	wdt_iwdg_refresh()
+      1 CALL	_bsod	bl	wdt_iwdg_refresh()
+      1 CALL	crash_dump::before_dump()	bl	wdt_iwdg_refresh()
+      1 CALL	iwdg_warning_cb()	b.n	iwdg_warning_cb()+0x18
+      1 CALL	marlin_server::_server_print_loop() [clone .lto_priv.0]	bl	wdt_iwdg_refresh()
+      1 IWDG_BASE_LITERAL	app_run()
+
+$ arm-none-eabi-objdump -d -C build/coreone_indx_release_boot/firmware | awk -f keys.awk | sort | uniq -c
+      1 KEY_0x5555	app_run()
+      1 KEY_0xCCCC	app_run()
+
+$ arm-none-eabi-objdump -d -C --disassemble='wdt_iwdg_refresh()' build/coreone_indx_release_boot/firmware | grep -E '^\s+[0-9a-f]+:'
+ 803bae2:	4b05      	ldr	r3, [pc, #20]	@ (803baf8 <wdt_iwdg_refresh()+0x16>)
+ 803bae4:	681b      	ldr	r3, [r3, #0]
+ 803bae6:	b12b      	cbz	r3, 803baf4 <wdt_iwdg_refresh()+0x12>
+ 803bae8:	f64a 22aa 	movw	r2, #43690	@ 0xaaaa
+ 803baec:	601a      	str	r2, [r3, #0]
+ 803baee:	4b03      	ldr	r3, [pc, #12]	@ (803bafc <wdt_iwdg_refresh()+0x1a>)
+ 803baf0:	2200      	movs	r2, #0
+ 803baf2:	635a      	str	r2, [r3, #52]	@ 0x34
+ 803baf4:	4770      	bx	lr
+ 803baf6:	bf00      	nop
+ 803baf8:	2000559c 	.word	0x2000559c
+ 803bafc:	2000bef0 	.word	0x2000bef0
