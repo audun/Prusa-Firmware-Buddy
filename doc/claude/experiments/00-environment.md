@@ -35,6 +35,11 @@ here (`dpkg -l <name>`): `libusb-1.0-0` and `build-essential` installed;
 `gettext`, `libjpeg-dev`, `python3-venv`, `python3-requests` **not**
 installed. Nothing was installed for this stage.
 
+OS packages installed later, all with `apt-get install -y` and each recorded
+in the stage that needed it: `gettext` (stages 1 and 2), `ccache`
+(stage 3, optional), `libglu1-mesa libglew2.2 libglut3.12` and
+`gdb-multiarch` (stage 4).
+
 Network: outbound HTTPS only, through a filtering proxy that re-terminates
 TLS (tools must trust an extra CA bundle; `requests`, `pip`, `git` and `curl`
 are pre-configured for it through the usual environment variables).
